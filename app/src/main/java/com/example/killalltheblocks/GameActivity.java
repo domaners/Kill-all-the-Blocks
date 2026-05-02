@@ -6,6 +6,7 @@ import android.content.ClipData;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Point;
 import android.graphics.RectF;
 import android.os.Bundle;
 import android.os.Handler;
@@ -184,7 +185,7 @@ public class GameActivity extends Activity {
         updateTimer();
         statusView.setText(gameEnded
                 ? "Game over. Start a new game to try for a higher score."
-                : "Drag a block onto the grid. The drop point becomes the block's top-left cell.");
+                : "Drag a block onto the grid. Your finger tracks the block's center.");
         boardView.invalidate();
         for (PieceView pieceView : pieceViews) {
             pieceView.invalidate();
@@ -347,15 +348,15 @@ public class GameActivity extends Activity {
         }
 
         private boolean updatePreview(int slot, float x, float y) {
-            int[] cell = cellAt(x, y);
+            int[] cell = anchoredCellAt(slot, x, y);
             previewSlot = slot;
             previewRow = cell[0];
             previewCol = cell[1];
             invalidate();
-            return previewRow >= 0 && previewCol >= 0;
+            return previewRow > -GameEngine.BOARD_SIZE && previewCol > -GameEngine.BOARD_SIZE;
         }
 
-        private int[] cellAt(float x, float y) {
+        private int[] anchoredCellAt(int slot, float x, float y) {
             float size = Math.min(getWidth(), getHeight());
             float cell = size / GameEngine.BOARD_SIZE;
             float left = (getWidth() - size) / 2f;
@@ -365,7 +366,11 @@ public class GameActivity extends Activity {
             if (row < 0 || row >= GameEngine.BOARD_SIZE || col < 0 || col >= GameEngine.BOARD_SIZE) {
                 return new int[]{-1, -1};
             }
-            return new int[]{row, col};
+            BlockPiece piece = engine.getPiece(slot);
+            if (piece == null) {
+                return new int[]{-1, -1};
+            }
+            return new int[]{row - piece.getHeight() / 2, col - piece.getWidth() / 2};
         }
 
         private void drawPreview(Canvas canvas, float cellSize, float left, float top) {
@@ -411,7 +416,7 @@ public class GameActivity extends Activity {
                 if (event.getAction() == MotionEvent.ACTION_DOWN && !gameEnded && engine.getPiece(slot) != null) {
                     view.performClick();
                     ClipData dragData = ClipData.newPlainText(PIECE_DRAG_LABEL, String.valueOf(slot));
-                    View.DragShadowBuilder shadowBuilder = new View.DragShadowBuilder(view);
+                    View.DragShadowBuilder shadowBuilder = new CenteredPieceDragShadowBuilder(view);
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
                         view.startDragAndDrop(dragData, shadowBuilder, slot, 0);
                     } else {
@@ -457,6 +462,28 @@ public class GameActivity extends Activity {
                 canvas.drawRoundRect(new RectF(x + inset, y + inset, x + cellSize - inset, y + cellSize - inset),
                         dp(5), dp(5), paint);
             }
+        }
+    }
+
+    private static final class CenteredPieceDragShadowBuilder extends View.DragShadowBuilder {
+        private final View view;
+
+        CenteredPieceDragShadowBuilder(View view) {
+            super(view);
+            this.view = view;
+        }
+
+        @Override
+        public void onProvideShadowMetrics(Point shadowSize, Point shadowTouchPoint) {
+            int width = Math.max(1, view.getWidth());
+            int height = Math.max(1, view.getHeight());
+            shadowSize.set(width, height);
+            shadowTouchPoint.set(width / 2, height / 2);
+        }
+
+        @Override
+        public void onDrawShadow(Canvas canvas) {
+            view.draw(canvas);
         }
     }
 }
