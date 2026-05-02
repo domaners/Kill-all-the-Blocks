@@ -29,6 +29,19 @@ final class BlockPiece {
         this.color = color;
     }
 
+    @Override
+    public boolean equals(Object other) {
+        if (!(other instanceof BlockPiece)) {
+            return false;
+        }
+        return name.equals(((BlockPiece) other).name);
+    }
+
+    @Override
+    public int hashCode() {
+        return name.hashCode();
+    }
+
     String getName() {
         return name;
     }

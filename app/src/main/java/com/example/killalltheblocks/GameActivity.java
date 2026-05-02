@@ -273,7 +273,7 @@ public class GameActivity extends Activity {
 
     private void saveCurrentGame() {
         if (!gameEnded && gameStateStore != null) {
-            gameStateStore.save(engine, gameStartedAt);
+            gameStateStore.save(engine, gameStartedAt, false);
         }
     }
 
