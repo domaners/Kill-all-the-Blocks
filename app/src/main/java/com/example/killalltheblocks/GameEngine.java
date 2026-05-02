@@ -135,6 +135,49 @@ public class GameEngine {
         refillTray();
     }
 
+    public String encodeBoard() {
+        StringBuilder builder = new StringBuilder(BOARD_SIZE * BOARD_SIZE);
+        for (int row = 0; row < BOARD_SIZE; row++) {
+            for (int col = 0; col < BOARD_SIZE; col++) {
+                builder.append(board[row][col] ? '1' : '0');
+            }
+        }
+        return builder.toString();
+    }
+
+    public void restoreState(String encodedBoard, String[] pieceNames, int score, int selectedSlot) {
+        if (encodedBoard == null || encodedBoard.length() != BOARD_SIZE * BOARD_SIZE
+                || pieceNames == null || pieceNames.length != PIECE_SLOTS) {
+            reset();
+            return;
+        }
+        for (int row = 0; row < BOARD_SIZE; row++) {
+            for (int col = 0; col < BOARD_SIZE; col++) {
+                char value = encodedBoard.charAt(row * BOARD_SIZE + col);
+                board[row][col] = value == '1';
+            }
+        }
+        for (int slot = 0; slot < PIECE_SLOTS; slot++) {
+            tray[slot] = BlockPiece.fromName(pieceNames[slot]);
+        }
+        this.score = Math.max(0, score);
+        this.selectedSlot = selectedSlot >= 0 && selectedSlot < PIECE_SLOTS && tray[selectedSlot] != null
+                ? selectedSlot
+                : NO_SELECTION;
+        finishedDurationMillis = 0L;
+        if (isTrayEmpty()) {
+            refillTray();
+        }
+    }
+
+    public String[] getPieceNames() {
+        String[] pieceNames = new String[PIECE_SLOTS];
+        for (int slot = 0; slot < PIECE_SLOTS; slot++) {
+            pieceNames[slot] = tray[slot] == null ? "" : tray[slot].getName();
+        }
+        return pieceNames;
+    }
+
     void setCellForTest(int row, int col, boolean filled) {
         board[row][col] = filled;
     }

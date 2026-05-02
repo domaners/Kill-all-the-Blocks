@@ -66,6 +66,18 @@ final class BlockPiece {
         return pieces.get(random.nextInt(pieces.size()));
     }
 
+    static BlockPiece fromName(String name) {
+        if (name == null) {
+            return null;
+        }
+        for (BlockPiece piece : standardPieces()) {
+            if (piece.name.equals(name)) {
+                return piece;
+            }
+        }
+        return null;
+    }
+
     static List<BlockPiece> standardPieces() {
         List<BlockPiece> pieces = new ArrayList<>();
         pieces.add(new BlockPiece("Single", new int[][]{{0, 0}}, 0xffef5350));

@@ -26,6 +26,7 @@ public class GameActivity extends Activity {
     private final Handler timerHandler = new Handler(Looper.getMainLooper());
     private final GameEngine engine = new GameEngine();
     private ScoreStore scoreStore;
+    private GameStateStore gameStateStore;
     private BoardView boardView;
     private PieceView[] pieceViews;
     private TextView scoreView;
@@ -47,7 +48,16 @@ public class GameActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         scoreStore = new ScoreStore(this);
-        gameStartedAt = System.currentTimeMillis();
+        gameStateStore = new GameStateStore(this);
+        GameStateStore.SavedGame savedGame = gameStateStore.load();
+        if (savedGame != null) {
+            engine.restoreState(savedGame.encodedBoard, savedGame.pieceNames, savedGame.score, savedGame.selectedSlot);
+            gameStartedAt = savedGame.startedAtMillis;
+            gameEnded = savedGame.gameEnded;
+            engine.setFinishedDurationMillis(savedGame.finishedDurationMillis);
+        } else {
+            gameStartedAt = System.currentTimeMillis();
+        }
         setContentView(createContentView());
         refreshAll();
         timerHandler.post(timerRunnable);
@@ -56,7 +66,14 @@ public class GameActivity extends Activity {
     @Override
     protected void onDestroy() {
         timerHandler.removeCallbacks(timerRunnable);
+        saveCurrentGame();
         super.onDestroy();
+    }
+
+    @Override
+    protected void onPause() {
+        saveCurrentGame();
+        super.onPause();
     }
 
     private View createContentView() {
@@ -87,9 +104,10 @@ public class GameActivity extends Activity {
         LinearLayout playArea = new LinearLayout(this);
         playArea.setOrientation(LinearLayout.HORIZONTAL);
         playArea.setGravity(Gravity.CENTER);
+        playArea.setBaselineAligned(false);
 
         boardView = new BoardView(this);
-        LinearLayout.LayoutParams boardParams = new LinearLayout.LayoutParams(dp(300), dp(300));
+        LinearLayout.LayoutParams boardParams = new LinearLayout.LayoutParams(0, dp(300), 1f);
         playArea.addView(boardView, boardParams);
 
         LinearLayout tray = new LinearLayout(this);
@@ -100,11 +118,12 @@ public class GameActivity extends Activity {
         for (int i = 0; i < pieceViews.length; i++) {
             PieceView pieceView = new PieceView(this, i);
             pieceViews[i] = pieceView;
-            LinearLayout.LayoutParams pieceParams = new LinearLayout.LayoutParams(dp(112), dp(96));
+            LinearLayout.LayoutParams pieceParams = new LinearLayout.LayoutParams(dp(86), dp(86));
             pieceParams.setMargins(0, dp(4), 0, dp(4));
             tray.addView(pieceView, pieceParams);
         }
-        playArea.addView(tray);
+        playArea.addView(tray, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(300)));
         root.addView(playArea, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -156,6 +175,7 @@ public class GameActivity extends Activity {
         engine.reset();
         gameStartedAt = System.currentTimeMillis();
         gameEnded = false;
+        saveCurrentGame();
         timerHandler.removeCallbacks(timerRunnable);
         timerHandler.post(timerRunnable);
         refreshAll();
@@ -216,6 +236,7 @@ public class GameActivity extends Activity {
             statusView.setText("That block does not fit there.");
             return;
         }
+        saveCurrentGame();
         if (!engine.hasAnyMove()) {
             finishGame();
         } else {
@@ -229,6 +250,7 @@ public class GameActivity extends Activity {
         engine.setFinishedDurationMillis(duration);
         timerHandler.removeCallbacks(timerRunnable);
         scoreStore.addScore(engine.getScore(), System.currentTimeMillis(), duration);
+        gameStateStore.clear();
         refreshAll();
         new AlertDialog.Builder(this)
                 .setTitle("Game over")
@@ -247,6 +269,12 @@ public class GameActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private void saveCurrentGame() {
+        if (!gameEnded && gameStateStore != null) {
+            gameStateStore.save(engine, gameStartedAt);
+        }
     }
 
     private final class BoardView extends View {

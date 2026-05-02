@@ -66,4 +66,26 @@ public class GameEngineTest {
 
         assertFalse(engine.hasAnyMove());
     }
+
+    @Test
+    public void restoresEncodedBoardPiecesAndSelection() {
+        GameEngine original = new GameEngine(new Random(5));
+        original.selectSlot(1);
+        original.placeSelected(0, 0);
+        original.selectSlot(2);
+
+        GameEngine restored = new GameEngine(new Random(6));
+        restored.restoreState(
+                original.encodeBoard(),
+                original.getPieceNames(),
+                original.getScore(),
+                original.getSelectedSlot());
+
+        assertEquals(original.getScore(), restored.getScore());
+        assertEquals(original.encodeBoard(), restored.encodeBoard());
+        assertEquals(original.getSelectedSlot(), restored.getSelectedSlot());
+        assertEquals(original.getPiece(0), restored.getPiece(0));
+        assertEquals(original.getPiece(1), restored.getPiece(1));
+        assertEquals(original.getPiece(2), restored.getPiece(2));
+    }
 }
