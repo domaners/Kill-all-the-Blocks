@@ -2,6 +2,7 @@ package com.example.killalltheblocks;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ClipData;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -9,7 +10,9 @@ import android.graphics.RectF;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.DragEvent;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
@@ -23,6 +26,8 @@ import java.util.List;
 import java.util.Locale;
 
 public class GameActivity extends Activity {
+    private static final String PIECE_DRAG_LABEL = "piece";
+
     private final Handler timerHandler = new Handler(Looper.getMainLooper());
     private final GameEngine engine = new GameEngine();
     private ScoreStore scoreStore;
@@ -101,30 +106,23 @@ public class GameActivity extends Activity {
         stats.addView(timerView, weightedWrapParams());
         root.addView(stats);
 
-        LinearLayout playArea = new LinearLayout(this);
-        playArea.setOrientation(LinearLayout.HORIZONTAL);
-        playArea.setGravity(Gravity.CENTER);
-        playArea.setBaselineAligned(false);
-
         boardView = new BoardView(this);
-        LinearLayout.LayoutParams boardParams = new LinearLayout.LayoutParams(0, dp(300), 1f);
-        playArea.addView(boardView, boardParams);
+        root.addView(boardView, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(360)));
 
         LinearLayout tray = new LinearLayout(this);
-        tray.setOrientation(LinearLayout.VERTICAL);
+        tray.setOrientation(LinearLayout.HORIZONTAL);
         tray.setGravity(Gravity.CENTER);
-        tray.setPadding(dp(12), 0, 0, 0);
+        tray.setPadding(0, dp(12), 0, 0);
         pieceViews = new PieceView[GameEngine.PIECE_SLOTS];
         for (int i = 0; i < pieceViews.length; i++) {
             PieceView pieceView = new PieceView(this, i);
             pieceViews[i] = pieceView;
-            LinearLayout.LayoutParams pieceParams = new LinearLayout.LayoutParams(dp(86), dp(86));
-            pieceParams.setMargins(0, dp(4), 0, dp(4));
+            LinearLayout.LayoutParams pieceParams = new LinearLayout.LayoutParams(0, dp(96), 1f);
+            pieceParams.setMargins(dp(4), 0, dp(4), 0);
             tray.addView(pieceView, pieceParams);
         }
-        playArea.addView(tray, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, dp(300)));
-        root.addView(playArea, new LinearLayout.LayoutParams(
+        root.addView(tray, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         statusView = new TextView(this);
@@ -186,7 +184,7 @@ public class GameActivity extends Activity {
         updateTimer();
         statusView.setText(gameEnded
                 ? "Game over. Start a new game to try for a higher score."
-                : "Tap a block, then tap the grid where its top-left corner should land.");
+                : "Drag a block onto the grid. The drop point becomes the block's top-left cell.");
         boardView.invalidate();
         for (PieceView pieceView : pieceViews) {
             pieceView.invalidate();
@@ -228,12 +226,13 @@ public class GameActivity extends Activity {
         return view;
     }
 
-    private void onBoardTapped(int row, int col) {
-        if (gameEnded || engine.getSelectedSlot() == GameEngine.NO_SELECTION) {
+    private void onPieceDropped(int slot, int row, int col) {
+        if (gameEnded) {
             return;
         }
-        if (!engine.placeSelected(row, col)) {
-            statusView.setText("That block does not fit there.");
+        if (!engine.placePiece(slot, row, col)) {
+            statusView.setText("That block does not fit there. Try another spot.");
+            boardView.clearPreview();
             return;
         }
         saveCurrentGame();
@@ -279,10 +278,13 @@ public class GameActivity extends Activity {
 
     private final class BoardView extends View {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private int previewSlot = GameEngine.NO_SELECTION;
+        private int previewRow = -1;
+        private int previewCol = -1;
 
         BoardView(Activity context) {
             super(context);
-            setOnClickListener(null);
+            setOnDragListener((view, event) -> handleDragEvent(event));
         }
 
         @Override
@@ -308,29 +310,93 @@ public class GameActivity extends Activity {
                             dp(5), dp(5), paint);
                 }
             }
+            drawPreview(canvas, cell, left, top);
         }
 
-        @Override
-        public boolean performClick() {
-            return super.performClick();
-        }
-
-        @Override
-        public boolean onTouchEvent(android.view.MotionEvent event) {
-            if (event.getAction() == android.view.MotionEvent.ACTION_UP) {
-                performClick();
-                float size = Math.min(getWidth(), getHeight());
-                float cell = size / GameEngine.BOARD_SIZE;
-                float left = (getWidth() - size) / 2f;
-                float top = (getHeight() - size) / 2f;
-                int col = (int) ((event.getX() - left) / cell);
-                int row = (int) ((event.getY() - top) / cell);
-                if (row >= 0 && row < GameEngine.BOARD_SIZE && col >= 0 && col < GameEngine.BOARD_SIZE) {
-                    onBoardTapped(row, col);
-                }
-                return true;
+        private boolean handleDragEvent(DragEvent event) {
+            Integer slot = getDraggedSlot(event);
+            switch (event.getAction()) {
+                case DragEvent.ACTION_DRAG_STARTED:
+                    return slot != null && !gameEnded && engine.getPiece(slot) != null;
+                case DragEvent.ACTION_DRAG_LOCATION:
+                    if (slot != null) {
+                        updatePreview(slot, event.getX(), event.getY());
+                    }
+                    return true;
+                case DragEvent.ACTION_DROP:
+                    if (slot != null && updatePreview(slot, event.getX(), event.getY())) {
+                        onPieceDropped(slot, previewRow, previewCol);
+                    } else {
+                        clearPreview();
+                    }
+                    return true;
+                case DragEvent.ACTION_DRAG_ENDED:
+                    clearPreview();
+                    return true;
+                default:
+                    return true;
             }
-            return true;
+        }
+
+        private Integer getDraggedSlot(DragEvent event) {
+            Object localState = event.getLocalState();
+            if (localState instanceof Integer) {
+                return (Integer) localState;
+            }
+            return null;
+        }
+
+        private boolean updatePreview(int slot, float x, float y) {
+            int[] cell = cellAt(x, y);
+            previewSlot = slot;
+            previewRow = cell[0];
+            previewCol = cell[1];
+            invalidate();
+            return previewRow >= 0 && previewCol >= 0;
+        }
+
+        private int[] cellAt(float x, float y) {
+            float size = Math.min(getWidth(), getHeight());
+            float cell = size / GameEngine.BOARD_SIZE;
+            float left = (getWidth() - size) / 2f;
+            float top = (getHeight() - size) / 2f;
+            int col = (int) ((x - left) / cell);
+            int row = (int) ((y - top) / cell);
+            if (row < 0 || row >= GameEngine.BOARD_SIZE || col < 0 || col >= GameEngine.BOARD_SIZE) {
+                return new int[]{-1, -1};
+            }
+            return new int[]{row, col};
+        }
+
+        private void drawPreview(Canvas canvas, float cellSize, float left, float top) {
+            if (previewSlot == GameEngine.NO_SELECTION || previewRow < 0 || previewCol < 0) {
+                return;
+            }
+            BlockPiece piece = engine.getPiece(previewSlot);
+            if (piece == null) {
+                return;
+            }
+            boolean canPlace = engine.canPlace(piece, previewRow, previewCol);
+            paint.setColor(canPlace ? Color.argb(150, 34, 197, 94) : Color.argb(150, 239, 68, 68));
+            for (BlockPiece.Cell cellPos : piece.getCells()) {
+                int row = previewRow + cellPos.row;
+                int col = previewCol + cellPos.col;
+                if (row < 0 || row >= GameEngine.BOARD_SIZE || col < 0 || col >= GameEngine.BOARD_SIZE) {
+                    continue;
+                }
+                float inset = dp(2);
+                canvas.drawRoundRect(
+                        new RectF(left + col * cellSize + inset, top + row * cellSize + inset,
+                                left + (col + 1) * cellSize - inset, top + (row + 1) * cellSize - inset),
+                        dp(5), dp(5), paint);
+            }
+        }
+
+        void clearPreview() {
+            previewSlot = GameEngine.NO_SELECTION;
+            previewRow = -1;
+            previewCol = -1;
+            invalidate();
         }
     }
 
@@ -341,11 +407,26 @@ public class GameActivity extends Activity {
         PieceView(Activity context, int slot) {
             super(context);
             this.slot = slot;
-            setOnClickListener(v -> {
-                if (!gameEnded && engine.selectSlot(slot)) {
-                    refreshAll();
+            setOnTouchListener((view, event) -> {
+                if (event.getAction() == MotionEvent.ACTION_DOWN && !gameEnded && engine.getPiece(slot) != null) {
+                    view.performClick();
+                    ClipData dragData = ClipData.newPlainText(PIECE_DRAG_LABEL, String.valueOf(slot));
+                    View.DragShadowBuilder shadowBuilder = new View.DragShadowBuilder(view);
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                        view.startDragAndDrop(dragData, shadowBuilder, slot, 0);
+                    } else {
+                        view.startDrag(dragData, shadowBuilder, slot, 0);
+                    }
+                    return true;
                 }
+                return false;
             });
+        }
+
+        @Override
+        public boolean performClick() {
+            super.performClick();
+            return true;
         }
 
         @Override
