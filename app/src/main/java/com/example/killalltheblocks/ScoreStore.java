@@ -32,7 +32,11 @@ public class ScoreStore {
                 JSONObject object = array.getJSONObject(i);
                 long finishedAt = object.getLong("finishedAtMillis");
                 long duration = object.getLong("durationMillis");
-                scores.add(new ScoreEntry(object.getInt("score"), finishedAt, duration));
+                scores.add(new ScoreEntry(
+                        object.getInt("score"),
+                        finishedAt,
+                        duration,
+                        object.optString("playerName", "Player 1")));
             }
         } catch (JSONException ignored) {
             scores.clear();
@@ -42,8 +46,12 @@ public class ScoreStore {
     }
 
     public List<ScoreEntry> addScore(int score, long timestamp, long durationMillis) {
+        return addScore(score, timestamp, durationMillis, "Player 1");
+    }
+
+    public List<ScoreEntry> addScore(int score, long timestamp, long durationMillis, String playerName) {
         List<ScoreEntry> scores = loadTopScores();
-        scores.add(new ScoreEntry(score, timestamp, durationMillis));
+        scores.add(new ScoreEntry(score, timestamp, durationMillis, playerName));
         sortScores(scores);
         while (scores.size() > MAX_SCORES) {
             scores.remove(scores.size() - 1);
@@ -53,7 +61,7 @@ public class ScoreStore {
     }
 
     public List<ScoreEntry> addScore(ScoreEntry entry) {
-        return addScore(entry.getScore(), entry.getFinishedAtMillis(), entry.getDurationMillis());
+        return addScore(entry.getScore(), entry.getFinishedAtMillis(), entry.getDurationMillis(), entry.getPlayerName());
     }
 
     public void clearScores() {
@@ -66,6 +74,7 @@ public class ScoreStore {
             JSONObject object = new JSONObject();
             try {
                 object.put("score", score.getScore());
+                object.put("playerName", score.getPlayerName());
                 object.put("finishedAtMillis", score.getFinishedAtMillis());
                 object.put("durationMillis", score.getDurationMillis());
                 array.put(object);

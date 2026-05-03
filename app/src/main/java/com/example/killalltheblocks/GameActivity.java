@@ -5,6 +5,8 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.Context;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -30,6 +32,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
@@ -158,6 +161,14 @@ public class GameActivity extends Activity {
         settings.setOnClickListener(v -> showSettingsScreen());
         root.addView(settings, buttonParams());
 
+        TextView version = new TextView(this);
+        version.setText("Version " + getVersionName());
+        version.setTextColor(Color.argb(190, 255, 255, 255));
+        version.setTextSize(12);
+        version.setGravity(Gravity.CENTER);
+        version.setPadding(0, dp(18), 0, 0);
+        root.addView(version, fullWrapParams());
+
         setContentView(root);
     }
 
@@ -191,6 +202,21 @@ public class GameActivity extends Activity {
 
         TextView heading = screenHeading("Settings");
         root.addView(heading, fullWrapParams());
+
+        TextView nameLabel = settingLabel("Player Name");
+        root.addView(nameLabel, fullWrapParams());
+        EditText playerName = new EditText(this);
+        playerName.setSingleLine(true);
+        playerName.setText(settingsStore.getPlayerName());
+        playerName.setTextColor(Color.WHITE);
+        playerName.setTextSize(18);
+        playerName.setSelectAllOnFocus(false);
+        playerName.setOnFocusChangeListener((view, hasFocus) -> {
+            if (!hasFocus) {
+                settingsStore.setPlayerName(playerName.getText().toString());
+            }
+        });
+        root.addView(playerName, fullWrapParams());
 
         TextView volumeLabel = settingLabel("Volume: " + settingsStore.getVolumePercent() + "%");
         root.addView(volumeLabel, fullWrapParams());
@@ -239,7 +265,10 @@ public class GameActivity extends Activity {
         root.addView(clearScores, buttonParams());
 
         Button back = menuButton("Back");
-        back.setOnClickListener(v -> showTitleScreen());
+        back.setOnClickListener(v -> {
+            settingsStore.setPlayerName(playerName.getText().toString());
+            showTitleScreen();
+        });
         root.addView(back, buttonParams());
         setContentView(root);
     }
@@ -461,8 +490,9 @@ public class GameActivity extends Activity {
         SimpleDateFormat formatter = new SimpleDateFormat("MMM d, yyyy h:mm a", Locale.getDefault());
         for (int i = 0; i < entries.size(); i++) {
             ScoreEntry entry = entries.get(i);
-            String text = String.format(Locale.getDefault(), "%d. %d pts - %s - %s",
+            String text = String.format(Locale.getDefault(), "%d. %s - %d pts - %s - %s",
                     i + 1,
+                    entry.getPlayerName(),
                     entry.getScore(),
                     formatter.format(new Date(entry.getFinishedAtMillis())),
                     formatDuration(entry.getDurationMillis()));
@@ -486,6 +516,8 @@ public class GameActivity extends Activity {
         if (!engine.placePiece(slot, row, col)) {
             statusView.setText("That block does not fit there. Try another spot.");
             boardView.clearPreview();
+            draggingSlot = GameEngine.NO_SELECTION;
+            refreshPieceViews();
             return;
         }
         int clearedLines = engine.getLastClearedLines();
@@ -546,7 +578,7 @@ public class GameActivity extends Activity {
         long duration = activeElapsedMillis;
         engine.setFinishedDurationMillis(duration);
         timerHandler.removeCallbacks(timerRunnable);
-        scoreStore.addScore(engine.getScore(), System.currentTimeMillis(), duration);
+        scoreStore.addScore(engine.getScore(), System.currentTimeMillis(), duration, settingsStore.getPlayerName());
         gameStateStore.clear();
         refreshAll(true);
         playTone(ToneGenerator.TONE_CDMA_ABBR_ALERT);
@@ -567,6 +599,15 @@ public class GameActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private String getVersionName() {
+        try {
+            PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
+            return info.versionName == null ? "1.0" : info.versionName;
+        } catch (PackageManager.NameNotFoundException ignored) {
+            return "1.0";
+        }
     }
 
     private void saveCurrentGame() {
@@ -626,7 +667,8 @@ public class GameActivity extends Activity {
             return;
         }
         try {
-            toneGenerator.startTone(toneType, Math.max(40, 90 + volume));
+            int duration = Math.max(35, 40 + volume);
+            toneGenerator.startTone(toneType, duration);
         } catch (RuntimeException ignored) {
             // ToneGenerator can fail on some devices if audio focus is unavailable.
         }
