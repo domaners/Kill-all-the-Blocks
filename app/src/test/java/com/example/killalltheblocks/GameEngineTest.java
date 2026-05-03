@@ -48,6 +48,7 @@ public class GameEngineTest {
 
         assertEquals(11, engine.getScore());
         assertEquals(1, engine.getLastClearedLines());
+        assertTrue(engine.getLastClearedRowsCopy()[0]);
         boolean[][] board = engine.copyBoard();
         for (int col = 0; col < GameEngine.BOARD_SIZE; col++) {
             assertFalse(board[0][col]);
@@ -70,7 +71,16 @@ public class GameEngineTest {
         assertTrue(engine.placePiece(0, 0, GameEngine.BOARD_SIZE - 2));
 
         assertEquals(2, engine.getLastClearedLines());
+        assertTrue(engine.getLastClearedRowsCopy()[0]);
+        assertTrue(engine.getLastClearedColsCopy()[GameEngine.BOARD_SIZE - 1]);
         assertEquals(82, engine.getScore());
+    }
+
+    @Test
+    public void countsAvailablePlacementsForCurrentTray() {
+        GameEngine engine = new GameEngine(new Random(10));
+
+        assertTrue(engine.countAvailablePlacements() > 0);
     }
 
     @Test

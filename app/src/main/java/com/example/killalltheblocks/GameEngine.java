@@ -17,6 +17,8 @@ public class GameEngine {
     private int selectedSlot = NO_SELECTION;
     private long finishedDurationMillis;
     private int lastClearedLines;
+    private final boolean[] lastClearedRows = new boolean[BOARD_SIZE];
+    private final boolean[] lastClearedCols = new boolean[BOARD_SIZE];
 
     public GameEngine() {
         this(new Random());
@@ -66,6 +68,14 @@ public class GameEngine {
         return lastClearedLines;
     }
 
+    public boolean[] getLastClearedRowsCopy() {
+        return Arrays.copyOf(lastClearedRows, lastClearedRows.length);
+    }
+
+    public boolean[] getLastClearedColsCopy() {
+        return Arrays.copyOf(lastClearedCols, lastClearedCols.length);
+    }
+
     public void setFinishedDurationMillis(long finishedDurationMillis) {
         this.finishedDurationMillis = finishedDurationMillis;
     }
@@ -93,7 +103,7 @@ public class GameEngine {
         if (!canPlace(piece, row, col)) {
             return false;
         }
-        lastClearedLines = 0;
+        clearLastClearedLines();
         for (BlockPiece.Cell cell : piece.getCells()) {
             board[row + cell.row][col + cell.col] = true;
             boardColors[row + cell.row][col + cell.col] = piece.getColor();
@@ -143,6 +153,23 @@ public class GameEngine {
         return false;
     }
 
+    public int countAvailablePlacements() {
+        int placements = 0;
+        for (BlockPiece piece : tray) {
+            if (piece == null) {
+                continue;
+            }
+            for (int row = 0; row < BOARD_SIZE; row++) {
+                for (int col = 0; col < BOARD_SIZE; col++) {
+                    if (canPlace(piece, row, col)) {
+                        placements++;
+                    }
+                }
+            }
+        }
+        return placements;
+    }
+
     boolean hasSequentialTrayPlacement() {
         BlockPiece[] pieces = new BlockPiece[PIECE_SLOTS];
         System.arraycopy(tray, 0, pieces, 0, tray.length);
@@ -159,7 +186,7 @@ public class GameEngine {
         score = 0;
         selectedSlot = NO_SELECTION;
         finishedDurationMillis = 0L;
-        lastClearedLines = 0;
+        clearLastClearedLines();
         refillTray();
     }
 
@@ -212,7 +239,7 @@ public class GameEngine {
                 ? selectedSlot
                 : NO_SELECTION;
         finishedDurationMillis = 0L;
-        lastClearedLines = 0;
+        clearLastClearedLines();
         if (isTrayEmpty()) {
             refillTray();
         }
@@ -247,6 +274,12 @@ public class GameEngine {
         return true;
     }
 
+    private void clearLastClearedLines() {
+        lastClearedLines = 0;
+        Arrays.fill(lastClearedRows, false);
+        Arrays.fill(lastClearedCols, false);
+    }
+
     private int clearCompletedLines() {
         boolean[] rowsToClear = new boolean[BOARD_SIZE];
         boolean[] colsToClear = new boolean[BOARD_SIZE];
@@ -262,6 +295,7 @@ public class GameEngine {
             }
             if (complete) {
                 rowsToClear[row] = true;
+                lastClearedRows[row] = true;
                 lineCount++;
             }
         }
@@ -276,6 +310,7 @@ public class GameEngine {
             }
             if (complete) {
                 colsToClear[col] = true;
+                lastClearedCols[col] = true;
                 lineCount++;
             }
         }
