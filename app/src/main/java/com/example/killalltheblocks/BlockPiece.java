@@ -122,7 +122,6 @@ final class BlockPiece {
         pieces.add(new BlockPiece("Upside Down T Tall", new int[][]{{0, 1}, {1, 1}, {2, 0}, {2, 1}, {2, 2}}, 0xffff9100));
         pieces.add(new BlockPiece("Z", new int[][]{{0, 0}, {0, 1}, {1, 1}, {1, 2}}, 0xff00b8d4));
         pieces.add(new BlockPiece("S", new int[][]{{0, 1}, {0, 2}, {1, 0}, {1, 1}}, 0xff76ff03));
-        pieces.add(new BlockPiece("Plus", new int[][]{{0, 1}, {1, 0}, {1, 1}, {1, 2}, {2, 1}}, 0xffffea00));
         return Collections.unmodifiableList(pieces);
     }
 }

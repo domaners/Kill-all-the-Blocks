@@ -124,6 +124,7 @@ public class GameEngineTest {
         assertNotNull(BlockPiece.fromName("L 3x3 Flip Vertical"));
         assertNotNull(BlockPiece.fromName("L 3x3 Flip Both"));
         assertNotNull(BlockPiece.fromName("Upside Down T Tall"));
+        assertEquals(null, BlockPiece.fromName("Plus"));
     }
 
     @Test

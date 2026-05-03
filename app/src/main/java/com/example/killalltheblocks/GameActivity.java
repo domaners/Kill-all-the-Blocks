@@ -59,6 +59,9 @@ public class GameActivity extends Activity {
             0.13f, 0.74f, 0.39f, 0.91f, 0.44f, 0.56f, 0.84f, 0.29f, 0.93f, 0.58f,
             0.04f, 0.32f, 0.72f, 0.18f
     };
+    private static final float DRAG_SHADOW_TOUCH_X = 0.5f;
+    private static final float DRAG_SHADOW_TOUCH_Y = 1.15f;
+    private static final float DRAG_BOARD_SPEED = 1.12f;
 
     private final Handler timerHandler = new Handler(Looper.getMainLooper());
     private final GameEngine engine = new GameEngine();
@@ -74,6 +77,7 @@ public class GameActivity extends Activity {
     private TextView timerView;
     private TextView statusView;
     private int draggingSlot = GameEngine.NO_SELECTION;
+    private boolean settingsOpenedFromGame;
     private long gameStartedAt;
     private long activeElapsedMillis;
     private long activeResumedAtMillis;
@@ -158,7 +162,7 @@ public class GameActivity extends Activity {
         root.addView(scores, buttonParams());
 
         Button settings = menuButton("Settings");
-        settings.setOnClickListener(v -> showSettingsScreen());
+        settings.setOnClickListener(v -> showSettingsScreen(false));
         root.addView(settings, buttonParams());
 
         TextView version = new TextView(this);
@@ -195,9 +199,15 @@ public class GameActivity extends Activity {
         setContentView(root);
     }
 
-    private void showSettingsScreen() {
+    private void showSettingsScreen(boolean fromGame) {
+        settingsOpenedFromGame = fromGame;
         timerHandler.removeCallbacks(timerRunnable);
-        stopMusic();
+        if (!fromGame) {
+            stopMusic();
+        } else {
+            pauseGameClock();
+            saveCurrentGame();
+        }
         PatternLayout root = baseRoot();
 
         TextView heading = screenHeading("Settings");
@@ -267,7 +277,15 @@ public class GameActivity extends Activity {
         Button back = menuButton("Back");
         back.setOnClickListener(v -> {
             settingsStore.setPlayerName(playerName.getText().toString());
-            showTitleScreen();
+            if (settingsOpenedFromGame) {
+                setContentView(createGameView());
+                resumeGameClock();
+                timerHandler.removeCallbacks(timerRunnable);
+                timerHandler.post(timerRunnable);
+                refreshAll(false);
+            } else {
+                showTitleScreen();
+            }
         });
         root.addView(back, buttonParams());
         setContentView(root);
@@ -276,14 +294,17 @@ public class GameActivity extends Activity {
     private View createGameView() {
         PatternLayout root = baseRoot();
 
-        TextView settingsButton = new TextView(this);
-        settingsButton.setText("\u2699");
-        settingsButton.setTextSize(30);
-        settingsButton.setTextColor(Color.WHITE);
-        settingsButton.setGravity(Gravity.RIGHT);
-        settingsButton.setShadowLayer(dp(4), 0, dp(1), Color.BLACK);
-        settingsButton.setOnClickListener(v -> showSettingsScreen());
-        root.addView(settingsButton, fullWrapParams());
+        LinearLayout topBar = new LinearLayout(this);
+        topBar.setOrientation(LinearLayout.HORIZONTAL);
+        topBar.setGravity(Gravity.CENTER_VERTICAL);
+        TextView back = iconButton("\u2039");
+        back.setOnClickListener(v -> showTitleScreen());
+        TextView cog = iconButton("\u2699");
+        cog.setOnClickListener(v -> showSettingsScreen(true));
+        topBar.addView(back, new LinearLayout.LayoutParams(dp(56), dp(48)));
+        topBar.addView(new View(this), new LinearLayout.LayoutParams(0, dp(48), 1f));
+        topBar.addView(cog, new LinearLayout.LayoutParams(dp(56), dp(48)));
+        root.addView(topBar, fullWrapParams());
 
         highScoreView = new TextView(this);
         highScoreView.setTextColor(Color.rgb(255, 232, 143));
@@ -300,13 +321,6 @@ public class GameActivity extends Activity {
         timerView = statText();
         stats.addView(scoreView, new LinearLayout.LayoutParams(0, dp(58), 1.25f));
         stats.addView(timerView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.75f));
-        TextView cog = new TextView(this);
-        cog.setText("\u2699");
-        cog.setTextColor(Color.WHITE);
-        cog.setTextSize(30);
-        cog.setGravity(Gravity.CENTER);
-        cog.setOnClickListener(v -> showSettingsScreen());
-        stats.addView(cog, new LinearLayout.LayoutParams(dp(48), dp(58)));
         root.addView(stats);
 
         boardView = new BoardView(this);
@@ -316,7 +330,7 @@ public class GameActivity extends Activity {
         LinearLayout tray = new LinearLayout(this);
         tray.setOrientation(LinearLayout.HORIZONTAL);
         tray.setGravity(Gravity.CENTER);
-        tray.setPadding(0, dp(8), 0, 0);
+        tray.setPadding(0, dp(44), 0, 0);
         pieceViews = new PieceView[GameEngine.PIECE_SLOTS];
         for (int i = 0; i < pieceViews.length; i++) {
             PieceView pieceView = new PieceView(this, i);
@@ -332,18 +346,8 @@ public class GameActivity extends Activity {
         statusView.setTextColor(Color.WHITE);
         statusView.setTextSize(14);
         statusView.setGravity(Gravity.CENTER);
-        statusView.setPadding(0, dp(6), 0, dp(6));
+        statusView.setPadding(0, dp(10), 0, 0);
         root.addView(statusView);
-
-        LinearLayout buttons = new LinearLayout(this);
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        Button newGameButton = menuButton("New Game");
-        newGameButton.setOnClickListener(v -> startNewGame());
-        Button menuButton = menuButton("Menu");
-        menuButton.setOnClickListener(v -> showTitleScreen());
-        buttons.addView(newGameButton, weightedWrapParams());
-        buttons.addView(menuButton, weightedWrapParams());
-        root.addView(buttons, fullWrapParams());
 
         return root;
     }
@@ -351,7 +355,7 @@ public class GameActivity extends Activity {
     private PatternLayout baseRoot() {
         PatternLayout root = new PatternLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(16), dp(16), dp(16), dp(16));
+        root.setPadding(dp(16), dp(42), dp(16), dp(16));
         return root;
     }
 
@@ -387,6 +391,17 @@ public class GameActivity extends Activity {
         label.setTypeface(Typeface.DEFAULT_BOLD);
         label.setPadding(0, dp(12), 0, 0);
         return label;
+    }
+
+    private TextView iconButton(String text) {
+        TextView view = new TextView(this);
+        view.setText(text);
+        view.setTextColor(Color.WHITE);
+        view.setTextSize(36);
+        view.setGravity(Gravity.CENTER);
+        view.setTypeface(Typeface.DEFAULT_BOLD);
+        view.setShadowLayer(dp(4), 0, dp(1), Color.BLACK);
+        return view;
     }
 
     private LinearLayout.LayoutParams buttonParams() {
@@ -667,7 +682,9 @@ public class GameActivity extends Activity {
             return;
         }
         try {
-            int duration = Math.max(35, 40 + volume);
+            int duration = Math.max(35, 80 + volume);
+            toneGenerator.release();
+            toneGenerator = new ToneGenerator(AudioManager.STREAM_MUSIC, volume);
             toneGenerator.startTone(toneType, duration);
         } catch (RuntimeException ignored) {
             // ToneGenerator can fail on some devices if audio focus is unavailable.
@@ -937,16 +954,20 @@ public class GameActivity extends Activity {
             float cell = cellSize();
             float left = (getWidth() - size) / 2f;
             float top = (getHeight() - size) / 2f;
-            int col = (int) ((x - left) / cell);
-            int row = (int) ((y - top) / cell);
-            if (row < 0 || row >= GameEngine.BOARD_SIZE || col < 0 || col >= GameEngine.BOARD_SIZE) {
-                return new int[]{-1, -1};
-            }
             BlockPiece piece = engine.getPiece(slot);
             if (piece == null) {
                 return new int[]{-1, -1};
             }
-            return new int[]{row - piece.getHeight() / 2, col - piece.getWidth() / 2};
+            float anchorX = x;
+            float anchorY = y - piece.getHeight() * cell * 0.55f;
+            float snapX = x + (anchorX - x) * 1.18f;
+            float snapY = y + (anchorY - y) * 1.18f;
+            int col = (int) ((snapX - left) / cell);
+            int row = (int) ((snapY - top) / cell);
+            if (row < 0 || row >= GameEngine.BOARD_SIZE || col < 0 || col >= GameEngine.BOARD_SIZE) {
+                return new int[]{-1, -1};
+            }
+            return new int[]{row, col - piece.getWidth() / 2};
         }
 
         private void drawPreview(Canvas canvas, float cellSize, float left, float top) {
@@ -1218,7 +1239,7 @@ public class GameActivity extends Activity {
             int width = bitmap.getWidth();
             int height = bitmap.getHeight();
             shadowSize.set(width, height);
-            shadowTouchPoint.set(width / 2, height / 2);
+            shadowTouchPoint.set(width / 2, Math.max(1, height));
         }
 
         @Override
