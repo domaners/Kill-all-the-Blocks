@@ -114,6 +114,11 @@ public class GameEngineTest {
     @Test
     public void requestedLargeShapesAreAvailable() {
         assertNotNull(BlockPiece.fromName("Five Horizontal"));
+        assertNotNull(BlockPiece.fromName("Square 3x3"));
+        assertNotNull(BlockPiece.fromName("Two Diagonal Down"));
+        assertNotNull(BlockPiece.fromName("Two Diagonal Up"));
+        assertNotNull(BlockPiece.fromName("Three Diagonal Down"));
+        assertNotNull(BlockPiece.fromName("Three Diagonal Up"));
         assertNotNull(BlockPiece.fromName("L 3x3"));
         assertNotNull(BlockPiece.fromName("L 3x3 Flip Horizontal"));
         assertNotNull(BlockPiece.fromName("L 3x3 Flip Vertical"));
