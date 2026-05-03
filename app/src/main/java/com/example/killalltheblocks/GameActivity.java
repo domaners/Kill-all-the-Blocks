@@ -11,8 +11,12 @@ import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Point;
+import android.graphics.Typeface;
 import android.graphics.RectF;
 import android.graphics.Shader;
+import android.graphics.drawable.GradientDrawable;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -25,8 +29,10 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.TextView;
 
 import java.text.SimpleDateFormat;
@@ -56,12 +62,15 @@ public class GameActivity extends Activity {
     private final Random praiseRandom = new Random();
     private ScoreStore scoreStore;
     private GameStateStore gameStateStore;
+    private GameSettingsStore settingsStore;
+    private ToneGenerator toneGenerator;
     private BoardView boardView;
     private PieceView[] pieceViews;
     private RollingScoreView scoreView;
     private TextView highScoreView;
     private TextView timerView;
     private TextView statusView;
+    private int draggingSlot = GameEngine.NO_SELECTION;
     private long gameStartedAt;
     private long activeElapsedMillis;
     private long activeResumedAtMillis;
@@ -81,6 +90,8 @@ public class GameActivity extends Activity {
         super.onCreate(savedInstanceState);
         scoreStore = new ScoreStore(this);
         gameStateStore = new GameStateStore(this);
+        settingsStore = new GameSettingsStore(this);
+        toneGenerator = new ToneGenerator(AudioManager.STREAM_MUSIC, 100);
         showTitleScreen();
     }
 
@@ -88,6 +99,9 @@ public class GameActivity extends Activity {
     protected void onDestroy() {
         timerHandler.removeCallbacks(timerRunnable);
         saveCurrentGame();
+        if (toneGenerator != null) {
+            toneGenerator.release();
+        }
         super.onDestroy();
     }
 
@@ -110,17 +124,13 @@ public class GameActivity extends Activity {
 
     private void showTitleScreen() {
         timerHandler.removeCallbacks(timerRunnable);
+        stopMusic();
         PatternLayout root = baseRoot();
         root.setGravity(Gravity.CENTER);
 
-        TextView title = new TextView(this);
-        title.setText("Kill All the Blocks");
-        title.setTextColor(Color.rgb(255, 244, 176));
-        title.setTextSize(38);
-        title.setGravity(Gravity.CENTER);
-        title.setShadowLayer(dp(8), 0, dp(2), Color.rgb(120, 68, 0));
-        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        root.addView(title, fullWrapParams());
+        TitleLogoView logo = new TitleLogoView(this);
+        root.addView(logo, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(230)));
 
         TextView subtitle = new TextView(this);
         subtitle.setText("Drag blocks. Clear rows and columns. Chase the gold score.");
@@ -144,11 +154,16 @@ public class GameActivity extends Activity {
         scores.setOnClickListener(v -> showHighScoresScreen());
         root.addView(scores, buttonParams());
 
+        Button settings = menuButton("Settings");
+        settings.setOnClickListener(v -> showSettingsScreen());
+        root.addView(settings, buttonParams());
+
         setContentView(root);
     }
 
     private void showHighScoresScreen() {
         timerHandler.removeCallbacks(timerRunnable);
+        stopMusic();
         PatternLayout root = baseRoot();
 
         TextView heading = screenHeading("High Scores");
@@ -169,8 +184,77 @@ public class GameActivity extends Activity {
         setContentView(root);
     }
 
+    private void showSettingsScreen() {
+        timerHandler.removeCallbacks(timerRunnable);
+        stopMusic();
+        PatternLayout root = baseRoot();
+
+        TextView heading = screenHeading("Settings");
+        root.addView(heading, fullWrapParams());
+
+        TextView volumeLabel = settingLabel("Volume: " + settingsStore.getVolumePercent() + "%");
+        root.addView(volumeLabel, fullWrapParams());
+        SeekBar volume = new SeekBar(this);
+        volume.setMax(100);
+        volume.setProgress(settingsStore.getVolumePercent());
+        volume.setPadding(0, dp(8), 0, dp(18));
+        volume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                settingsStore.setVolumePercent(progress);
+                volumeLabel.setText("Volume: " + progress + "%");
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                playTone(ToneGenerator.TONE_PROP_BEEP);
+            }
+        });
+        root.addView(volume, fullWrapParams());
+
+        CheckBox haptics = new CheckBox(this);
+        haptics.setText("Haptics");
+        haptics.setTextColor(Color.WHITE);
+        haptics.setTextSize(18);
+        haptics.setChecked(settingsStore.isHapticsEnabled());
+        haptics.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            settingsStore.setHapticsEnabled(isChecked);
+            if (isChecked) {
+                buttonView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+            }
+        });
+        root.addView(haptics, fullWrapParams());
+
+        Button clearScores = menuButton("Clear High Scores");
+        clearScores.setOnClickListener(v -> new AlertDialog.Builder(this)
+                .setTitle("Clear high scores?")
+                .setMessage("This cannot be undone.")
+                .setPositiveButton("Clear", (dialog, which) -> scoreStore.clearScores())
+                .setNegativeButton("Cancel", null)
+                .show());
+        root.addView(clearScores, buttonParams());
+
+        Button back = menuButton("Back");
+        back.setOnClickListener(v -> showTitleScreen());
+        root.addView(back, buttonParams());
+        setContentView(root);
+    }
+
     private View createGameView() {
         PatternLayout root = baseRoot();
+
+        TextView settingsButton = new TextView(this);
+        settingsButton.setText("\u2699");
+        settingsButton.setTextSize(30);
+        settingsButton.setTextColor(Color.WHITE);
+        settingsButton.setGravity(Gravity.RIGHT);
+        settingsButton.setShadowLayer(dp(4), 0, dp(1), Color.BLACK);
+        settingsButton.setOnClickListener(v -> showSettingsScreen());
+        root.addView(settingsButton, fullWrapParams());
 
         highScoreView = new TextView(this);
         highScoreView.setTextColor(Color.rgb(255, 232, 143));
@@ -187,6 +271,13 @@ public class GameActivity extends Activity {
         timerView = statText();
         stats.addView(scoreView, new LinearLayout.LayoutParams(0, dp(58), 1.25f));
         stats.addView(timerView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.75f));
+        TextView cog = new TextView(this);
+        cog.setText("\u2699");
+        cog.setTextColor(Color.WHITE);
+        cog.setTextSize(30);
+        cog.setGravity(Gravity.CENTER);
+        cog.setOnClickListener(v -> showSettingsScreen());
+        stats.addView(cog, new LinearLayout.LayoutParams(dp(48), dp(58)));
         root.addView(stats);
 
         boardView = new BoardView(this);
@@ -251,7 +342,22 @@ public class GameActivity extends Activity {
         button.setText(text);
         button.setAllCaps(false);
         button.setTextSize(18);
+        button.setTextColor(Color.WHITE);
+        button.setTypeface(Typeface.DEFAULT_BOLD);
+        button.setShadowLayer(dp(2), 0, dp(1), Color.rgb(30, 30, 30));
+        button.setMinHeight(dp(54));
+        button.setBackground(roundedButtonDrawable(text));
         return button;
+    }
+
+    private TextView settingLabel(String text) {
+        TextView label = new TextView(this);
+        label.setText(text);
+        label.setTextColor(Color.WHITE);
+        label.setTextSize(18);
+        label.setTypeface(Typeface.DEFAULT_BOLD);
+        label.setPadding(0, dp(12), 0, 0);
+        return label;
     }
 
     private LinearLayout.LayoutParams buttonParams() {
@@ -383,12 +489,15 @@ public class GameActivity extends Activity {
             return;
         }
         int clearedLines = engine.getLastClearedLines();
+        playTone(ToneGenerator.TONE_PROP_BEEP);
         if (clearedLines > 0) {
             int multiplier = engine.getLastScoreMultiplier();
             boardView.triggerClearAnimations(clearedLines, multiplier);
             performClearHaptics(multiplier);
+            playTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD);
             shakeBoard();
         }
+        draggingSlot = GameEngine.NO_SELECTION;
         saveCurrentGame();
         if (!engine.hasAnyMove()) {
             finishGame();
@@ -407,6 +516,9 @@ public class GameActivity extends Activity {
     }
 
     private void performClearHaptics(int multiplier) {
+        if (!settingsStore.isHapticsEnabled()) {
+            return;
+        }
         if (boardView == null) {
             return;
         }
@@ -430,12 +542,14 @@ public class GameActivity extends Activity {
     private void finishGame() {
         gameEnded = true;
         pauseGameClock();
+        stopMusic();
         long duration = activeElapsedMillis;
         engine.setFinishedDurationMillis(duration);
         timerHandler.removeCallbacks(timerRunnable);
         scoreStore.addScore(engine.getScore(), System.currentTimeMillis(), duration);
         gameStateStore.clear();
         refreshAll(true);
+        playTone(ToneGenerator.TONE_CDMA_ABBR_ALERT);
         new AlertDialog.Builder(this)
                 .setTitle("Game over")
                 .setMessage("Score: " + engine.getScore() + "\nDuration: " + formatDuration(duration))
@@ -480,6 +594,55 @@ public class GameActivity extends Activity {
             return activeElapsedMillis;
         }
         return activeElapsedMillis + (System.currentTimeMillis() - activeResumedAtMillis);
+    }
+
+    private GradientDrawable roundedButtonDrawable(String text) {
+        int startColor = Color.rgb(59, 130, 246);
+        int endColor = Color.rgb(29, 78, 216);
+        String lower = text.toLowerCase(Locale.US);
+        if (lower.contains("start") || lower.contains("resume")) {
+            startColor = Color.rgb(34, 197, 94);
+            endColor = Color.rgb(21, 128, 61);
+        } else if (lower.contains("score")) {
+            startColor = Color.rgb(245, 158, 11);
+            endColor = Color.rgb(180, 83, 9);
+        } else if (lower.contains("clear")) {
+            startColor = Color.rgb(239, 68, 68);
+            endColor = Color.rgb(153, 27, 27);
+        } else if (lower.contains("settings")) {
+            startColor = Color.rgb(168, 85, 247);
+            endColor = Color.rgb(109, 40, 217);
+        }
+        GradientDrawable drawable = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{startColor, endColor});
+        drawable.setCornerRadius(dp(10));
+        drawable.setStroke(dp(2), Color.argb(190, 255, 255, 255));
+        return drawable;
+    }
+
+    private void playTone(int toneType) {
+        int volume = settingsStore == null ? 70 : settingsStore.getVolumePercent();
+        if (toneGenerator == null || volume <= 0) {
+            return;
+        }
+        try {
+            toneGenerator.startTone(toneType, Math.max(40, 90 + volume));
+        } catch (RuntimeException ignored) {
+            // ToneGenerator can fail on some devices if audio focus is unavailable.
+        }
+    }
+
+    private void stopMusic() {
+        // No bundled music asset is available in the repository; sound effects remain enabled.
+    }
+
+    private void refreshPieceViews() {
+        if (pieceViews == null) {
+            return;
+        }
+        for (PieceView pieceView : pieceViews) {
+            pieceView.invalidate();
+        }
     }
 
     private final class PatternLayout extends LinearLayout {
@@ -659,6 +822,14 @@ public class GameActivity extends Activity {
                                         left + (col + 1) * cell - inset, top + row * cell + cell * 0.38f),
                                 dp(5), dp(5), paint);
                     }
+                    paint.setStyle(Paint.Style.STROKE);
+                    paint.setStrokeWidth(dp(1));
+                    paint.setColor(Color.argb(150, 148, 163, 184));
+                    canvas.drawRoundRect(
+                            new RectF(left + col * cell + inset, top + row * cell + inset,
+                                    left + (col + 1) * cell - inset, top + (row + 1) * cell - inset),
+                            dp(5), dp(5), paint);
+                    paint.setStyle(Paint.Style.FILL);
                 }
             }
             drawPreview(canvas, cell, left, top);
@@ -693,6 +864,8 @@ public class GameActivity extends Activity {
                     }
                     return true;
                 case DragEvent.ACTION_DRAG_ENDED:
+                    draggingSlot = GameEngine.NO_SELECTION;
+                    refreshPieceViews();
                     clearPreview();
                     return true;
                 default:
@@ -878,6 +1051,8 @@ public class GameActivity extends Activity {
             setOnTouchListener((view, event) -> {
                 if (event.getAction() == MotionEvent.ACTION_DOWN && !gameEnded && engine.getPiece(slot) != null) {
                     view.performClick();
+                    draggingSlot = slot;
+                    invalidate();
                     ClipData dragData = ClipData.newPlainText(PIECE_DRAG_LABEL, String.valueOf(slot));
                     View.DragShadowBuilder shadowBuilder = new PieceDragShadowBuilder(view, engine.getPiece(slot));
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
@@ -902,10 +1077,6 @@ public class GameActivity extends Activity {
             super.onDraw(canvas);
             BlockPiece piece = engine.getPiece(slot);
             if (piece == null) {
-                paint.setColor(Color.argb(190, 255, 255, 255));
-                paint.setTextSize(dp(14));
-                paint.setTextAlign(Paint.Align.CENTER);
-                canvas.drawText("Placed", getWidth() / 2f, getHeight() / 2f + dp(5), paint);
                 return;
             }
 
@@ -915,6 +1086,13 @@ public class GameActivity extends Activity {
             float cellSize = Math.min(gridCellSize, Math.min(maxCellWidth, maxCellHeight));
             float originX = (getWidth() - piece.getWidth() * cellSize) / 2f;
             float originY = (getHeight() - piece.getHeight() * cellSize) / 2f;
+            if (draggingSlot == slot) {
+                paint.setStyle(Paint.Style.FILL);
+                paint.setColor(Color.argb(90, 255, 255, 255));
+                canvas.drawRoundRect(new RectF(originX - dp(4), originY - dp(4),
+                        originX + piece.getWidth() * cellSize + dp(4),
+                        originY + piece.getHeight() * cellSize + dp(4)), dp(10), dp(10), paint);
+            }
             drawPieceCells(canvas, paint, piece, cellSize, originX, originY, dp(2));
         }
     }
@@ -932,6 +1110,49 @@ public class GameActivity extends Activity {
             canvas.drawRoundRect(new RectF(x + inset, y + inset, x + cellSize - inset, y + cellSize * 0.38f),
                     dp(5), dp(5), paint);
             paint.setColor(piece.getColor());
+        }
+    }
+
+    private final class TitleLogoView extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        TitleLogoView(Activity context) {
+            super(context);
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            float centerX = getWidth() / 2f;
+            float y = dp(58);
+            drawLogoLine(canvas, "Kill all", centerX, y, dp(52), 0xffffd86b);
+            drawLogoLine(canvas, "the", centerX, y + dp(62), dp(48), 0xffffe38c);
+            drawLogoLine(canvas, "Blocks", centerX, y + dp(122), dp(50), 0xffff9f55);
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(0xccffd86b);
+            for (int i = 0; i < 8; i++) {
+                float x = (i % 4) * dp(34) + centerX - dp(68);
+                float blockY = y + dp(172) + (i / 4) * dp(14);
+                canvas.drawRoundRect(new RectF(x, blockY, x + dp(10), blockY + dp(10)), dp(2), dp(2), paint);
+            }
+        }
+
+        private void drawLogoLine(Canvas canvas, String text, float centerX, float baseline, float size, int fill) {
+            paint.setTextAlign(Paint.Align.CENTER);
+            paint.setTypeface(Typeface.DEFAULT_BOLD);
+            paint.setTextSize(size);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(dp(8));
+            paint.setColor(0xff12224f);
+            canvas.drawText(text, centerX, baseline, paint);
+            paint.setStrokeWidth(dp(4));
+            paint.setColor(0xfffff0b7);
+            canvas.drawText(text, centerX, baseline, paint);
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(fill);
+            paint.setShadowLayer(dp(8), 0, dp(2), 0xaa000000);
+            canvas.drawText(text, centerX, baseline, paint);
+            paint.clearShadowLayer();
         }
     }
 
