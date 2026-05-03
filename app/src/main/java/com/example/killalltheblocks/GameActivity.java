@@ -29,12 +29,27 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.Random;
 
 public class GameActivity extends Activity {
     private static final String PIECE_DRAG_LABEL = "piece";
+    private static final String[] PRAISE_TEXT = {
+            "Great!", "Awesome!", "Excellent!", "Amazing!", "Brilliant!", "Combo!"
+    };
+    private static final float[] STAR_X = {
+            0.06f, 0.12f, 0.18f, 0.27f, 0.34f, 0.43f, 0.51f, 0.60f, 0.67f, 0.74f,
+            0.82f, 0.90f, 0.96f, 0.14f, 0.24f, 0.37f, 0.49f, 0.58f, 0.72f, 0.86f,
+            0.31f, 0.79f, 0.04f, 0.93f
+    };
+    private static final float[] STAR_Y = {
+            0.08f, 0.23f, 0.61f, 0.14f, 0.80f, 0.35f, 0.09f, 0.67f, 0.21f, 0.48f,
+            0.13f, 0.74f, 0.39f, 0.91f, 0.44f, 0.56f, 0.84f, 0.29f, 0.93f, 0.58f,
+            0.04f, 0.32f, 0.72f, 0.18f
+    };
 
     private final Handler timerHandler = new Handler(Looper.getMainLooper());
     private final GameEngine engine = new GameEngine();
+    private final Random praiseRandom = new Random();
     private ScoreStore scoreStore;
     private GameStateStore gameStateStore;
     private BoardView boardView;
@@ -363,7 +378,9 @@ public class GameActivity extends Activity {
             boardView.clearPreview();
             return;
         }
-        if (engine.getLastClearedLines() > 0) {
+        int clearedLines = engine.getLastClearedLines();
+        if (clearedLines > 0) {
+            boardView.triggerClearAnimations(clearedLines);
             shakeBoard();
         }
         saveCurrentGame();
@@ -456,19 +473,22 @@ public class GameActivity extends Activity {
             canvas.drawRect(0, 0, getWidth(), getHeight(), paint);
             paint.setShader(null);
 
-            int[] colors = {
-                    0x66facc15, 0x664ade80, 0x6638bdf8, 0x66fb7185, 0x66a78bfa
-            };
-            for (int i = 0; i < 18; i++) {
-                paint.setColor(colors[i % colors.length]);
-                float cx = (getWidth() * ((i * 37) % 100)) / 100f;
-                float cy = (getHeight() * ((i * 53) % 100)) / 100f;
-                float radius = dp(18 + (i % 5) * 9);
-                canvas.drawCircle(cx, cy, radius, paint);
+            paint.setStyle(Paint.Style.FILL);
+            for (int i = 0; i < STAR_X.length; i++) {
+                float cx = STAR_X[i] * getWidth();
+                float cy = STAR_Y[i] * getHeight();
+                paint.setColor(i % 4 == 0 ? 0xfffff7ad : 0xeeffffff);
+                float size = dp(i % 3 == 0 ? 3 : 2);
+                canvas.drawLine(cx - size, cy, cx + size, cy, paint);
+                canvas.drawLine(cx, cy - size, cx, cy + size, paint);
             }
-            paint.setColor(0x33000000);
-            for (int i = -getHeight(); i < getWidth(); i += dp(44)) {
-                canvas.drawRoundRect(new RectF(i, 0, i + dp(18), getHeight()), dp(12), dp(12), paint);
+            paint.setColor(0x33ffffff);
+            for (int i = 0; i < 7; i++) {
+                float startX = getWidth() * (0.08f + i * 0.13f);
+                float startY = getHeight() * (0.25f + (i % 3) * 0.12f);
+                canvas.drawRoundRect(
+                        new RectF(startX, startY, startX + dp(70 + i * 8), startY + dp(2)),
+                        dp(2), dp(2), paint);
             }
             super.onDraw(canvas);
         }
@@ -529,7 +549,6 @@ public class GameActivity extends Activity {
             paint.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
             paint.setShadowLayer(dp(6), 0, dp(2), Color.rgb(100, 58, 0));
 
-            String prefix = "Score ";
             String from = String.valueOf(previousScore);
             String to = String.valueOf(displayedScore);
             int width = Math.max(from.length(), to.length());
@@ -537,10 +556,7 @@ public class GameActivity extends Activity {
             to = leftPad(to, width);
 
             float y = getHeight() / 2f - (paint.descent() + paint.ascent()) / 2f;
-            float totalWidth = paint.measureText(prefix + to);
-            float x = (getWidth() - totalWidth) / 2f;
-            canvas.drawText(prefix, x + paint.measureText(prefix) / 2f, y, paint);
-            x += paint.measureText(prefix);
+            float x = dp(4);
 
             for (int i = 0; i < width; i++) {
                 String oldDigit = String.valueOf(from.charAt(i));
@@ -573,6 +589,14 @@ public class GameActivity extends Activity {
         private int previewSlot = GameEngine.NO_SELECTION;
         private int previewRow = -1;
         private int previewCol = -1;
+        private float clearFlashProgress;
+        private boolean[] flashingRows = new boolean[GameEngine.BOARD_SIZE];
+        private boolean[] flashingCols = new boolean[GameEngine.BOARD_SIZE];
+        private String praiseText;
+        private float praiseProgress = 1f;
+        private ValueAnimator clearFlashAnimator;
+        private ValueAnimator praiseAnimator;
+        private ValueAnimator dangerAnimator;
 
         BoardView(Activity context) {
             super(context);
@@ -611,6 +635,9 @@ public class GameActivity extends Activity {
                 }
             }
             drawPreview(canvas, cell, left, top);
+            drawLineFlash(canvas, cell, left, top);
+            drawDangerBorder(canvas, left, top, size);
+            drawPraise(canvas, left, top, size);
         }
 
         float cellSize() {
@@ -718,6 +745,96 @@ public class GameActivity extends Activity {
             previewRow = -1;
             previewCol = -1;
             invalidate();
+        }
+
+        void triggerClearAnimations(int clearedLines) {
+            flashingRows = engine.getLastClearedRowsCopy();
+            flashingCols = engine.getLastClearedColsCopy();
+            if (clearFlashAnimator != null) {
+                clearFlashAnimator.cancel();
+            }
+            clearFlashAnimator = ValueAnimator.ofFloat(1f, 0f);
+            clearFlashAnimator.setDuration(420);
+            clearFlashAnimator.addUpdateListener(animation -> {
+                clearFlashProgress = (float) animation.getAnimatedValue();
+                invalidate();
+            });
+            clearFlashAnimator.start();
+
+            if (clearedLines > 1) {
+                praiseText = PRAISE_TEXT[praiseRandom.nextInt(PRAISE_TEXT.length)];
+                praiseProgress = 0f;
+                if (praiseAnimator != null) {
+                    praiseAnimator.cancel();
+                }
+                praiseAnimator = ValueAnimator.ofFloat(0f, 1f);
+                praiseAnimator.setDuration(720);
+                praiseAnimator.addUpdateListener(animation -> {
+                    praiseProgress = (float) animation.getAnimatedValue();
+                    invalidate();
+                });
+                praiseAnimator.start();
+            }
+        }
+
+        private void drawLineFlash(Canvas canvas, float cellSize, float left, float top) {
+            if (clearFlashProgress <= 0f) {
+                return;
+            }
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(Color.argb((int) (210 * clearFlashProgress), 255, 255, 255));
+            for (int row = 0; row < GameEngine.BOARD_SIZE; row++) {
+                if (flashingRows[row]) {
+                    canvas.drawRoundRect(new RectF(left, top + row * cellSize,
+                            left + GameEngine.BOARD_SIZE * cellSize, top + (row + 1) * cellSize),
+                            dp(7), dp(7), paint);
+                }
+            }
+            for (int col = 0; col < GameEngine.BOARD_SIZE; col++) {
+                if (flashingCols[col]) {
+                    canvas.drawRoundRect(new RectF(left + col * cellSize, top,
+                            left + (col + 1) * cellSize, top + GameEngine.BOARD_SIZE * cellSize),
+                            dp(7), dp(7), paint);
+                }
+            }
+        }
+
+        private void drawPraise(Canvas canvas, float left, float top, float size) {
+            if (praiseText == null || praiseProgress >= 1f) {
+                return;
+            }
+            float fadeProgress = Math.max(0f, (praiseProgress - 0.7f) / 0.3f);
+            int alpha = Math.max(0, (int) (255 * (1f - fadeProgress)));
+            paint.setStyle(Paint.Style.FILL);
+            paint.setTextAlign(Paint.Align.CENTER);
+            paint.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            paint.setTextSize(dp(42));
+            paint.setColor(Color.argb(alpha, 255, 235, 59));
+            paint.setShadowLayer(dp(8), 0, dp(2), Color.BLACK);
+            canvas.drawText(praiseText, left + size / 2f,
+                    top + size / 2f - (paint.descent() + paint.ascent()) / 2f, paint);
+            paint.clearShadowLayer();
+        }
+
+        private void drawDangerBorder(Canvas canvas, float left, float top, float size) {
+            if (engine.countAvailablePlacements() > 8) {
+                return;
+            }
+            if (dangerAnimator == null || !dangerAnimator.isStarted()) {
+                dangerAnimator = ValueAnimator.ofFloat(0.25f, 1f);
+                dangerAnimator.setDuration(360);
+                dangerAnimator.setRepeatCount(ValueAnimator.INFINITE);
+                dangerAnimator.setRepeatMode(ValueAnimator.REVERSE);
+                dangerAnimator.addUpdateListener(animation -> invalidate());
+                dangerAnimator.start();
+            }
+            float pulse = (float) dangerAnimator.getAnimatedValue();
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(dp(4));
+            paint.setColor(Color.argb((int) (220 * pulse), 255, 23, 68));
+            canvas.drawRoundRect(new RectF(left + dp(2), top + dp(2), left + size - dp(2), top + size - dp(2)),
+                    dp(14), dp(14), paint);
+            paint.setStyle(Paint.Style.FILL);
         }
     }
 
