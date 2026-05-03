@@ -962,14 +962,17 @@ public class GameActivity extends Activity {
             if (piece == null) {
                 return new int[]{-1, -1};
             }
-            float visibleCenterX = x;
-            float visibleCenterY = y - dragHoverOffsetPx();
+            float visibleCenterX = left + (x - left) * 1.25f;
+            float visibleCenterY = top + (y - top) * 1.25f - dragHoverOffsetPx();
+            visibleCenterX = clamp(visibleCenterX, left, left + size - 1f);
+            visibleCenterY = clamp(visibleCenterY, top, top + size - 1f);
             int col = (int) Math.floor((visibleCenterX - left) / cell);
             int row = (int) Math.floor((visibleCenterY - top) / cell);
-            if (row < 0 || row >= GameEngine.BOARD_SIZE || col < 0 || col >= GameEngine.BOARD_SIZE) {
-                return new int[]{-1, -1};
-            }
             return new int[]{row, col - piece.getWidth() / 2};
+        }
+
+        private float clamp(float value, float min, float max) {
+            return Math.max(min, Math.min(max, value));
         }
 
         private void drawPreview(Canvas canvas, float cellSize, float left, float top) {
