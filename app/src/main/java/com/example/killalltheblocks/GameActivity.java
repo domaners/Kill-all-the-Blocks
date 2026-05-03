@@ -20,7 +20,6 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -160,22 +159,19 @@ public class GameActivity extends Activity {
         root.addView(boardView, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(360)));
 
-        HorizontalScrollView trayScroll = new HorizontalScrollView(this);
-        trayScroll.setHorizontalScrollBarEnabled(false);
         LinearLayout tray = new LinearLayout(this);
         tray.setOrientation(LinearLayout.HORIZONTAL);
-        tray.setGravity(Gravity.CENTER_VERTICAL);
-        tray.setPadding(dp(4), dp(12), dp(4), 0);
+        tray.setGravity(Gravity.CENTER);
+        tray.setPadding(0, dp(8), 0, 0);
         pieceViews = new PieceView[GameEngine.PIECE_SLOTS];
         for (int i = 0; i < pieceViews.length; i++) {
             PieceView pieceView = new PieceView(this, i);
             pieceViews[i] = pieceView;
-            LinearLayout.LayoutParams pieceParams = new LinearLayout.LayoutParams(dp(208), dp(156));
-            pieceParams.setMargins(dp(4), 0, dp(4), 0);
+            LinearLayout.LayoutParams pieceParams = new LinearLayout.LayoutParams(0, dp(120), 1f);
+            pieceParams.setMargins(dp(2), 0, dp(2), 0);
             tray.addView(pieceView, pieceParams);
         }
-        trayScroll.addView(tray);
-        root.addView(trayScroll, new LinearLayout.LayoutParams(
+        root.addView(tray, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         statusView = new TextView(this);
@@ -697,18 +693,18 @@ public class GameActivity extends Activity {
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
             BlockPiece piece = engine.getPiece(slot);
-            paint.setStyle(Paint.Style.FILL);
-            paint.setColor(Color.argb(210, 15, 23, 42));
-            canvas.drawRoundRect(new RectF(0, 0, getWidth(), getHeight()), dp(12), dp(12), paint);
             if (piece == null) {
-                paint.setColor(Color.rgb(203, 213, 225));
+                paint.setColor(Color.argb(190, 255, 255, 255));
                 paint.setTextSize(dp(14));
                 paint.setTextAlign(Paint.Align.CENTER);
                 canvas.drawText("Placed", getWidth() / 2f, getHeight() / 2f + dp(5), paint);
                 return;
             }
 
-            float cellSize = boardView == null ? dp(40) : boardView.cellSize();
+            float gridCellSize = boardView == null ? dp(40) : boardView.cellSize();
+            float maxCellWidth = (getWidth() - dp(4)) / Math.max(1, piece.getWidth());
+            float maxCellHeight = (getHeight() - dp(4)) / Math.max(1, piece.getHeight());
+            float cellSize = Math.min(gridCellSize, Math.min(maxCellWidth, maxCellHeight));
             float originX = (getWidth() - piece.getWidth() * cellSize) / 2f;
             float originY = (getHeight() - piece.getHeight() * cellSize) / 2f;
             paint.setColor(piece.getColor());

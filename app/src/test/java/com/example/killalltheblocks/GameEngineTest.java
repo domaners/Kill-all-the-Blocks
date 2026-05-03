@@ -53,6 +53,35 @@ public class GameEngineTest {
     }
 
     @Test
+    public void simultaneousLinesApplyScoreMultiplier() {
+        GameEngine engine = new GameEngine(new Random(7));
+        BlockPiece domino = new BlockPiece("Domino", new int[][]{{0, 0}, {0, 1}}, 0xffffffff);
+        for (int col = 0; col < GameEngine.BOARD_SIZE - 2; col++) {
+            engine.setCellForTest(0, col, true);
+        }
+        for (int row = 1; row < GameEngine.BOARD_SIZE - 1; row++) {
+            engine.setCellForTest(row, GameEngine.BOARD_SIZE - 1, true);
+        }
+        engine.setCellForTest(GameEngine.BOARD_SIZE - 1, GameEngine.BOARD_SIZE - 1, true);
+        engine.setPieceForTest(0, domino);
+
+        assertTrue(engine.placePiece(0, 0, GameEngine.BOARD_SIZE - 2));
+
+        assertEquals(2, engine.getLastClearedLines());
+        assertEquals(82, engine.getScore());
+    }
+
+    @Test
+    public void requestedLargeShapesAreAvailable() {
+        assertNotNull(BlockPiece.fromName("Five Horizontal"));
+        assertNotNull(BlockPiece.fromName("L 3x3"));
+        assertNotNull(BlockPiece.fromName("L 3x3 Flip Horizontal"));
+        assertNotNull(BlockPiece.fromName("L 3x3 Flip Vertical"));
+        assertNotNull(BlockPiece.fromName("L 3x3 Flip Both"));
+        assertNotNull(BlockPiece.fromName("Upside Down T Tall"));
+    }
+
+    @Test
     public void newTrayCanBePlacedSequentiallyOnCurrentBoard() {
         for (int seed = 0; seed < 50; seed++) {
             GameEngine engine = new GameEngine(new Random(seed));
