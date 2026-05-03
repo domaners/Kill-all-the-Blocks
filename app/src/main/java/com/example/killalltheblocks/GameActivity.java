@@ -326,6 +326,15 @@ public class GameActivity extends Activity {
         boardView = new BoardView(this);
         root.addView(boardView, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(360)));
+        root.setOnDragListener((view, event) -> {
+            if (boardView == null) {
+                return false;
+            }
+            return boardView.handleDragEvent(
+                    event,
+                    event.getX() - boardView.getLeft(),
+                    event.getY() - boardView.getTop());
+        });
 
         LinearLayout tray = new LinearLayout(this);
         tray.setOrientation(LinearLayout.HORIZONTAL);
@@ -853,7 +862,6 @@ public class GameActivity extends Activity {
 
         BoardView(Activity context) {
             super(context);
-            setOnDragListener((view, event) -> handleDragEvent(event));
         }
 
         @Override
@@ -909,18 +917,18 @@ public class GameActivity extends Activity {
             return Math.min(getWidth(), getHeight());
         }
 
-        private boolean handleDragEvent(DragEvent event) {
+        private boolean handleDragEvent(DragEvent event, float x, float y) {
             Integer slot = getDraggedSlot(event);
             switch (event.getAction()) {
                 case DragEvent.ACTION_DRAG_STARTED:
                     return slot != null && !gameEnded && engine.getPiece(slot) != null;
                 case DragEvent.ACTION_DRAG_LOCATION:
                     if (slot != null) {
-                        updatePreview(slot, event.getX(), event.getY());
+                        updatePreview(slot, x, y);
                     }
                     return true;
                 case DragEvent.ACTION_DROP:
-                    if (slot != null && updatePreview(slot, event.getX(), event.getY())) {
+                    if (slot != null && updatePreview(slot, x, y)) {
                         onPieceDropped(slot, previewRow, previewCol);
                     } else {
                         clearPreview();
@@ -963,8 +971,10 @@ public class GameActivity extends Activity {
                 return new int[]{-1, -1};
             }
             float[] pieceTopLeft = draggedPieceTopLeft(slot, piece, x, y, cell);
-            float visibleLeft = clamp(pieceTopLeft[0], left, left + size - 1f);
-            float visibleTop = clamp(pieceTopLeft[1], top, top + size - 1f);
+            float maxLeft = left + (GameEngine.BOARD_SIZE - piece.getWidth()) * cell;
+            float maxTop = top + (GameEngine.BOARD_SIZE - piece.getHeight()) * cell;
+            float visibleLeft = clamp(pieceTopLeft[0], left, maxLeft);
+            float visibleTop = clamp(pieceTopLeft[1], top, maxTop);
             int col = (int) Math.floor((visibleLeft - left) / cell);
             int row = (int) Math.floor((visibleTop - top) / cell);
             return new int[]{row, col};
