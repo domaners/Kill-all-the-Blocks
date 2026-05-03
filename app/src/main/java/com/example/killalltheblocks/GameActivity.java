@@ -15,8 +15,12 @@ import android.graphics.Shader;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.content.Context;
 import android.view.DragEvent;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -295,7 +299,7 @@ public class GameActivity extends Activity {
             return;
         }
         engine.restoreState(savedGame.encodedBoard, savedGame.encodedBoardColors,
-                savedGame.pieceNames, savedGame.score, savedGame.selectedSlot);
+                savedGame.pieceNames, savedGame.score, savedGame.selectedSlot, savedGame.comboStreak);
         gameStartedAt = savedGame.startedAtMillis;
         activeElapsedMillis = savedGame.elapsedMillis;
         gameEnded = savedGame.gameEnded;
@@ -311,7 +315,7 @@ public class GameActivity extends Activity {
 
     private void refreshAll(boolean animateScore) {
         int highScore = getHighScore();
-        highScoreView.setText("Best: " + highScore);
+        highScoreView.setText("High Score: " + highScore);
         if (animateScore) {
             scoreView.animateTo(engine.getScore());
         } else {
@@ -380,7 +384,9 @@ public class GameActivity extends Activity {
         }
         int clearedLines = engine.getLastClearedLines();
         if (clearedLines > 0) {
-            boardView.triggerClearAnimations(clearedLines);
+            int multiplier = engine.getLastScoreMultiplier();
+            boardView.triggerClearAnimations(clearedLines, multiplier);
+            performClearHaptics(multiplier);
             shakeBoard();
         }
         saveCurrentGame();
@@ -398,6 +404,22 @@ public class GameActivity extends Activity {
                 boardView.animate().translationX(-distance).setDuration(35).withEndAction(() ->
                         boardView.animate().translationX(distance / 2f).setDuration(35).withEndAction(() ->
                                 boardView.animate().translationX(0f).setDuration(35).start()).start()).start()).start();
+    }
+
+    private void performClearHaptics(int multiplier) {
+        if (boardView == null) {
+            return;
+        }
+        if (multiplier > 1) {
+            Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+            if (vibrator != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(45, Math.min(255, 90 + multiplier * 35)));
+                return;
+            }
+            boardView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        } else {
+            boardView.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+        }
     }
 
     private void finishGame() {
@@ -747,7 +769,7 @@ public class GameActivity extends Activity {
             invalidate();
         }
 
-        void triggerClearAnimations(int clearedLines) {
+        void triggerClearAnimations(int clearedLines, int multiplier) {
             flashingRows = engine.getLastClearedRowsCopy();
             flashingCols = engine.getLastClearedColsCopy();
             if (clearFlashAnimator != null) {
@@ -761,8 +783,8 @@ public class GameActivity extends Activity {
             });
             clearFlashAnimator.start();
 
-            if (clearedLines > 1) {
-                praiseText = PRAISE_TEXT[praiseRandom.nextInt(PRAISE_TEXT.length)];
+            if (multiplier > 1) {
+                praiseText = PRAISE_TEXT[praiseRandom.nextInt(PRAISE_TEXT.length)] + " x" + multiplier;
                 praiseProgress = 0f;
                 if (praiseAnimator != null) {
                     praiseAnimator.cancel();
