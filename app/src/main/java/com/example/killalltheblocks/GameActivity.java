@@ -4,6 +4,7 @@ import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -17,7 +18,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
-import android.content.Context;
 import android.view.DragEvent;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
@@ -411,10 +411,15 @@ public class GameActivity extends Activity {
             return;
         }
         if (multiplier > 1) {
-            Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
-            if (vibrator != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(45, Math.min(255, 90 + multiplier * 35)));
-                return;
+            try {
+                Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+                if (vibrator != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O
+                        && vibrator.hasVibrator()) {
+                    vibrator.vibrate(VibrationEffect.createOneShot(45, Math.min(255, 90 + multiplier * 35)));
+                    return;
+                }
+            } catch (RuntimeException ignored) {
+                // Fall back to view haptics if the device disallows direct vibration.
             }
             boardView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
         } else {
@@ -784,7 +789,10 @@ public class GameActivity extends Activity {
             clearFlashAnimator.start();
 
             if (multiplier > 1) {
-                praiseText = PRAISE_TEXT[praiseRandom.nextInt(PRAISE_TEXT.length)] + " x" + multiplier;
+                String praise = PRAISE_TEXT.length == 0
+                        ? "Great!"
+                        : PRAISE_TEXT[praiseRandom.nextInt(PRAISE_TEXT.length)];
+                praiseText = praise + " x" + multiplier;
                 praiseProgress = 0f;
                 if (praiseAnimator != null) {
                     praiseAnimator.cancel();
