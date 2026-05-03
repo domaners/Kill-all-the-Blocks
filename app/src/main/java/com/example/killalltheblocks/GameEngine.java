@@ -88,10 +88,10 @@ public class GameEngine {
         for (BlockPiece.Cell cell : piece.getCells()) {
             board[row + cell.row][col + cell.col] = true;
         }
-        int placedCells = piece.getCellCount();
         int clearedLines = clearCompletedLines();
         lastClearedLines = clearedLines;
-        score += placedCells + (clearedLines * clearedLines * 10);
+        int lineMultiplier = Math.max(1, clearedLines);
+        score += piece.getCellCount() + (clearedLines * clearedLines * 10 * lineMultiplier);
         tray[trayIndex] = null;
         selectedSlot = NO_SELECTION;
         if (isTrayEmpty()) {
