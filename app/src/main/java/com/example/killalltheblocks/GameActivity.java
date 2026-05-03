@@ -1,13 +1,16 @@
 package com.example.killalltheblocks;
 
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.RectF;
+import android.graphics.Shader;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -17,6 +20,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -35,10 +39,10 @@ public class GameActivity extends Activity {
     private GameStateStore gameStateStore;
     private BoardView boardView;
     private PieceView[] pieceViews;
-    private TextView scoreView;
+    private RollingScoreView scoreView;
+    private TextView highScoreView;
     private TextView timerView;
     private TextView statusView;
-    private LinearLayout leaderboardLayout;
     private long gameStartedAt;
     private boolean gameEnded;
 
@@ -55,18 +59,7 @@ public class GameActivity extends Activity {
         super.onCreate(savedInstanceState);
         scoreStore = new ScoreStore(this);
         gameStateStore = new GameStateStore(this);
-        GameStateStore.SavedGame savedGame = gameStateStore.load();
-        if (savedGame != null) {
-            engine.restoreState(savedGame.encodedBoard, savedGame.pieceNames, savedGame.score, savedGame.selectedSlot);
-            gameStartedAt = savedGame.startedAtMillis;
-            gameEnded = savedGame.gameEnded;
-            engine.setFinishedDurationMillis(savedGame.finishedDurationMillis);
-        } else {
-            gameStartedAt = System.currentTimeMillis();
-        }
-        setContentView(createContentView());
-        refreshAll();
-        timerHandler.post(timerRunnable);
+        showTitleScreen();
     }
 
     @Override
@@ -82,79 +75,165 @@ public class GameActivity extends Activity {
         super.onPause();
     }
 
-    private View createContentView() {
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(16), dp(16), dp(16), dp(16));
-        root.setBackgroundColor(Color.rgb(17, 24, 39));
+    private void showTitleScreen() {
+        timerHandler.removeCallbacks(timerRunnable);
+        PatternLayout root = baseRoot();
+        root.setGravity(Gravity.CENTER);
 
         TextView title = new TextView(this);
         title.setText("Kill All the Blocks");
-        title.setTextColor(Color.WHITE);
-        title.setTextSize(28);
+        title.setTextColor(Color.rgb(255, 244, 176));
+        title.setTextSize(38);
         title.setGravity(Gravity.CENTER);
+        title.setShadowLayer(dp(8), 0, dp(2), Color.rgb(120, 68, 0));
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        root.addView(title, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(title, fullWrapParams());
+
+        TextView subtitle = new TextView(this);
+        subtitle.setText("Drag blocks. Clear rows and columns. Chase the gold score.");
+        subtitle.setTextColor(Color.WHITE);
+        subtitle.setTextSize(17);
+        subtitle.setGravity(Gravity.CENTER);
+        subtitle.setPadding(0, dp(16), 0, dp(28));
+        root.addView(subtitle, fullWrapParams());
+
+        Button start = menuButton("Start New Game");
+        start.setOnClickListener(v -> startNewGame());
+        root.addView(start, buttonParams());
+
+        if (gameStateStore.load() != null) {
+            Button resume = menuButton("Resume Game");
+            resume.setOnClickListener(v -> resumeSavedGame());
+            root.addView(resume, buttonParams());
+        }
+
+        Button scores = menuButton("View High Scores");
+        scores.setOnClickListener(v -> showHighScoresScreen());
+        root.addView(scores, buttonParams());
+
+        setContentView(root);
+    }
+
+    private void showHighScoresScreen() {
+        timerHandler.removeCallbacks(timerRunnable);
+        PatternLayout root = baseRoot();
+
+        TextView heading = screenHeading("High Scores");
+        root.addView(heading, fullWrapParams());
+
+        ScrollView scrollView = new ScrollView(this);
+        LinearLayout scores = new LinearLayout(this);
+        scores.setOrientation(LinearLayout.VERTICAL);
+        scores.setPadding(0, dp(18), 0, dp(18));
+        addScoreRows(scores, true);
+        scrollView.addView(scores);
+        root.addView(scrollView, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        Button back = menuButton("Back");
+        back.setOnClickListener(v -> showTitleScreen());
+        root.addView(back, buttonParams());
+        setContentView(root);
+    }
+
+    private View createGameView() {
+        PatternLayout root = baseRoot();
+
+        highScoreView = new TextView(this);
+        highScoreView.setTextColor(Color.rgb(255, 232, 143));
+        highScoreView.setTextSize(15);
+        highScoreView.setGravity(Gravity.CENTER);
+        highScoreView.setShadowLayer(dp(3), 0, dp(1), Color.rgb(60, 34, 0));
+        root.addView(highScoreView, fullWrapParams());
 
         LinearLayout stats = new LinearLayout(this);
         stats.setOrientation(LinearLayout.HORIZONTAL);
         stats.setGravity(Gravity.CENTER);
-        stats.setPadding(0, dp(10), 0, dp(10));
-        scoreView = statText();
+        stats.setPadding(0, dp(4), 0, dp(10));
+        scoreView = new RollingScoreView(this);
         timerView = statText();
-        stats.addView(scoreView, weightedWrapParams());
-        stats.addView(timerView, weightedWrapParams());
+        stats.addView(scoreView, new LinearLayout.LayoutParams(0, dp(58), 1.25f));
+        stats.addView(timerView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.75f));
         root.addView(stats);
 
         boardView = new BoardView(this);
         root.addView(boardView, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(360)));
 
+        HorizontalScrollView trayScroll = new HorizontalScrollView(this);
+        trayScroll.setHorizontalScrollBarEnabled(false);
         LinearLayout tray = new LinearLayout(this);
         tray.setOrientation(LinearLayout.HORIZONTAL);
-        tray.setGravity(Gravity.CENTER);
-        tray.setPadding(0, dp(12), 0, 0);
+        tray.setGravity(Gravity.CENTER_VERTICAL);
+        tray.setPadding(dp(4), dp(12), dp(4), 0);
         pieceViews = new PieceView[GameEngine.PIECE_SLOTS];
         for (int i = 0; i < pieceViews.length; i++) {
             PieceView pieceView = new PieceView(this, i);
             pieceViews[i] = pieceView;
-            LinearLayout.LayoutParams pieceParams = new LinearLayout.LayoutParams(0, dp(96), 1f);
+            LinearLayout.LayoutParams pieceParams = new LinearLayout.LayoutParams(dp(208), dp(156));
             pieceParams.setMargins(dp(4), 0, dp(4), 0);
             tray.addView(pieceView, pieceParams);
         }
-        root.addView(tray, new LinearLayout.LayoutParams(
+        trayScroll.addView(tray);
+        root.addView(trayScroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         statusView = new TextView(this);
-        statusView.setTextColor(Color.rgb(209, 213, 219));
-        statusView.setTextSize(15);
+        statusView.setTextColor(Color.WHITE);
+        statusView.setTextSize(14);
         statusView.setGravity(Gravity.CENTER);
-        statusView.setPadding(0, dp(8), 0, dp(8));
+        statusView.setPadding(0, dp(6), 0, dp(6));
         root.addView(statusView);
 
-        Button newGameButton = new Button(this);
-        newGameButton.setText("New Game");
+        LinearLayout buttons = new LinearLayout(this);
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+        Button newGameButton = menuButton("New Game");
         newGameButton.setOnClickListener(v -> startNewGame());
-        root.addView(newGameButton, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        TextView leadersTitle = new TextView(this);
-        leadersTitle.setText("Top 10 Scores");
-        leadersTitle.setTextColor(Color.WHITE);
-        leadersTitle.setTextSize(20);
-        leadersTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        leadersTitle.setPadding(0, dp(14), 0, dp(4));
-        root.addView(leadersTitle);
-
-        ScrollView scrollView = new ScrollView(this);
-        leaderboardLayout = new LinearLayout(this);
-        leaderboardLayout.setOrientation(LinearLayout.VERTICAL);
-        scrollView.addView(leaderboardLayout);
-        root.addView(scrollView, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        Button menuButton = menuButton("Menu");
+        menuButton.setOnClickListener(v -> showTitleScreen());
+        buttons.addView(newGameButton, weightedWrapParams());
+        buttons.addView(menuButton, weightedWrapParams());
+        root.addView(buttons, fullWrapParams());
 
         return root;
+    }
+
+    private PatternLayout baseRoot() {
+        PatternLayout root = new PatternLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(16), dp(16), dp(16), dp(16));
+        return root;
+    }
+
+    private TextView screenHeading(String text) {
+        TextView heading = new TextView(this);
+        heading.setText(text);
+        heading.setTextColor(Color.rgb(255, 244, 176));
+        heading.setTextSize(30);
+        heading.setGravity(Gravity.CENTER);
+        heading.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        heading.setShadowLayer(dp(6), 0, dp(2), Color.rgb(96, 53, 0));
+        return heading;
+    }
+
+    private Button menuButton(String text) {
+        Button button = new Button(this);
+        button.setText(text);
+        button.setAllCaps(false);
+        button.setTextSize(18);
+        return button;
+    }
+
+    private LinearLayout.LayoutParams buttonParams() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, dp(8), 0, dp(8));
+        return params;
+    }
+
+    private LinearLayout.LayoutParams fullWrapParams() {
+        return new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
     }
 
     private TextView statText() {
@@ -174,14 +253,37 @@ public class GameActivity extends Activity {
         engine.reset();
         gameStartedAt = System.currentTimeMillis();
         gameEnded = false;
+        setContentView(createGameView());
         saveCurrentGame();
         timerHandler.removeCallbacks(timerRunnable);
         timerHandler.post(timerRunnable);
-        refreshAll();
+        refreshAll(false);
     }
 
-    private void refreshAll() {
-        scoreView.setText("Score: " + engine.getScore());
+    private void resumeSavedGame() {
+        GameStateStore.SavedGame savedGame = gameStateStore.load();
+        if (savedGame == null) {
+            startNewGame();
+            return;
+        }
+        engine.restoreState(savedGame.encodedBoard, savedGame.pieceNames, savedGame.score, savedGame.selectedSlot);
+        gameStartedAt = savedGame.startedAtMillis;
+        gameEnded = savedGame.gameEnded;
+        engine.setFinishedDurationMillis(savedGame.finishedDurationMillis);
+        setContentView(createGameView());
+        timerHandler.removeCallbacks(timerRunnable);
+        timerHandler.post(timerRunnable);
+        refreshAll(false);
+    }
+
+    private void refreshAll(boolean animateScore) {
+        int highScore = getHighScore();
+        highScoreView.setText("Best: " + highScore);
+        if (animateScore) {
+            scoreView.animateTo(engine.getScore());
+        } else {
+            scoreView.setScore(engine.getScore());
+        }
         updateTimer();
         statusView.setText(gameEnded
                 ? "Game over. Start a new game to try for a higher score."
@@ -190,20 +292,27 @@ public class GameActivity extends Activity {
         for (PieceView pieceView : pieceViews) {
             pieceView.invalidate();
         }
-        refreshLeaderboard();
+    }
+
+    private int getHighScore() {
+        List<ScoreEntry> entries = scoreStore.loadTopScores();
+        return entries.isEmpty() ? 0 : entries.get(0).getScore();
     }
 
     private void updateTimer() {
+        if (timerView == null) {
+            return;
+        }
         long duration = gameEnded ? engine.getFinishedDurationMillis() : System.currentTimeMillis() - gameStartedAt;
         timerView.setText("Time: " + formatDuration(duration));
     }
 
-    private void refreshLeaderboard() {
-        leaderboardLayout.removeAllViews();
+    private void addScoreRows(LinearLayout parent, boolean largeRows) {
+        parent.removeAllViews();
         List<ScoreEntry> entries = scoreStore.loadTopScores();
         if (entries.isEmpty()) {
-            TextView empty = leaderText("No completed games yet.");
-            leaderboardLayout.addView(empty);
+            TextView empty = leaderText("No completed games yet.", largeRows);
+            parent.addView(empty);
             return;
         }
         SimpleDateFormat formatter = new SimpleDateFormat("MMM d, yyyy h:mm a", Locale.getDefault());
@@ -214,16 +323,16 @@ public class GameActivity extends Activity {
                     entry.getScore(),
                     formatter.format(new Date(entry.getFinishedAtMillis())),
                     formatDuration(entry.getDurationMillis()));
-            leaderboardLayout.addView(leaderText(text));
+            parent.addView(leaderText(text, largeRows));
         }
     }
 
-    private TextView leaderText(String text) {
+    private TextView leaderText(String text, boolean largeRows) {
         TextView view = new TextView(this);
         view.setText(text);
-        view.setTextColor(Color.rgb(229, 231, 235));
-        view.setTextSize(14);
-        view.setPadding(0, dp(3), 0, dp(3));
+        view.setTextColor(Color.WHITE);
+        view.setTextSize(largeRows ? 17 : 14);
+        view.setPadding(0, dp(5), 0, dp(5));
         return view;
     }
 
@@ -236,12 +345,24 @@ public class GameActivity extends Activity {
             boardView.clearPreview();
             return;
         }
+        if (engine.getLastClearedLines() > 0) {
+            shakeBoard();
+        }
         saveCurrentGame();
         if (!engine.hasAnyMove()) {
             finishGame();
         } else {
-            refreshAll();
+            refreshAll(true);
         }
+    }
+
+    private void shakeBoard() {
+        final float distance = dp(4);
+        boardView.animate().cancel();
+        boardView.animate().translationX(distance).setDuration(35).withEndAction(() ->
+                boardView.animate().translationX(-distance).setDuration(35).withEndAction(() ->
+                        boardView.animate().translationX(distance / 2f).setDuration(35).withEndAction(() ->
+                                boardView.animate().translationX(0f).setDuration(35).start()).start()).start()).start();
     }
 
     private void finishGame() {
@@ -251,12 +372,12 @@ public class GameActivity extends Activity {
         timerHandler.removeCallbacks(timerRunnable);
         scoreStore.addScore(engine.getScore(), System.currentTimeMillis(), duration);
         gameStateStore.clear();
-        refreshAll();
+        refreshAll(true);
         new AlertDialog.Builder(this)
                 .setTitle("Game over")
                 .setMessage("Score: " + engine.getScore() + "\nDuration: " + formatDuration(duration))
                 .setPositiveButton("New Game", (dialog, which) -> startNewGame())
-                .setNegativeButton("Close", null)
+                .setNegativeButton("Menu", (dialog, which) -> showTitleScreen())
                 .show();
     }
 
@@ -272,8 +393,138 @@ public class GameActivity extends Activity {
     }
 
     private void saveCurrentGame() {
-        if (!gameEnded && gameStateStore != null) {
+        if (!gameEnded && gameStateStore != null && boardView != null) {
             gameStateStore.save(engine, gameStartedAt, false);
+        }
+    }
+
+    private final class PatternLayout extends LinearLayout {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        PatternLayout(Activity context) {
+            super(context);
+            setWillNotDraw(false);
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            paint.setShader(new LinearGradient(
+                    0, 0, getWidth(), getHeight(),
+                    new int[]{0xff26105f, 0xff0f766e, 0xffe11d48, 0xfff59e0b},
+                    null,
+                    Shader.TileMode.CLAMP));
+            canvas.drawRect(0, 0, getWidth(), getHeight(), paint);
+            paint.setShader(null);
+
+            int[] colors = {
+                    0x66facc15, 0x664ade80, 0x6638bdf8, 0x66fb7185, 0x66a78bfa
+            };
+            for (int i = 0; i < 18; i++) {
+                paint.setColor(colors[i % colors.length]);
+                float cx = (getWidth() * ((i * 37) % 100)) / 100f;
+                float cy = (getHeight() * ((i * 53) % 100)) / 100f;
+                float radius = dp(18 + (i % 5) * 9);
+                canvas.drawCircle(cx, cy, radius, paint);
+            }
+            paint.setColor(0x33000000);
+            for (int i = -getHeight(); i < getWidth(); i += dp(44)) {
+                canvas.drawRoundRect(new RectF(i, 0, i + dp(18), getHeight()), dp(12), dp(12), paint);
+            }
+            super.onDraw(canvas);
+        }
+    }
+
+    private final class RollingScoreView extends TextView {
+        private int displayedScore;
+        private int previousScore;
+        private float rollProgress = 1f;
+        private ValueAnimator animator;
+
+        RollingScoreView(Activity context) {
+            super(context);
+            setTextColor(Color.rgb(255, 215, 0));
+            setTextSize(34);
+            setGravity(Gravity.CENTER);
+            setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            setShadowLayer(dp(6), 0, dp(2), Color.rgb(100, 58, 0));
+        }
+
+        void setScore(int score) {
+            if (animator != null) {
+                animator.cancel();
+            }
+            previousScore = Math.max(0, score);
+            displayedScore = previousScore;
+            rollProgress = 1f;
+            setText("");
+            invalidate();
+        }
+
+        void animateTo(int targetScore) {
+            final int target = Math.max(0, targetScore);
+            if (target <= displayedScore) {
+                setScore(target);
+                return;
+            }
+            if (animator != null) {
+                animator.cancel();
+            }
+            previousScore = displayedScore;
+            final int startScore = previousScore;
+            animator = ValueAnimator.ofFloat(0f, 1f);
+            animator.setDuration(Math.min(900, 220 + (target - displayedScore) * 35L));
+            animator.addUpdateListener(animation -> {
+                rollProgress = (float) animation.getAnimatedValue();
+                displayedScore = startScore + Math.round((target - startScore) * rollProgress);
+                invalidate();
+            });
+            animator.start();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            Paint paint = getPaint();
+            paint.setColor(getCurrentTextColor());
+            paint.setTextAlign(Paint.Align.CENTER);
+            paint.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            paint.setShadowLayer(dp(6), 0, dp(2), Color.rgb(100, 58, 0));
+
+            String prefix = "Score ";
+            String from = String.valueOf(previousScore);
+            String to = String.valueOf(displayedScore);
+            int width = Math.max(from.length(), to.length());
+            from = leftPad(from, width);
+            to = leftPad(to, width);
+
+            float y = getHeight() / 2f - (paint.descent() + paint.ascent()) / 2f;
+            float totalWidth = paint.measureText(prefix + to);
+            float x = (getWidth() - totalWidth) / 2f;
+            canvas.drawText(prefix, x + paint.measureText(prefix) / 2f, y, paint);
+            x += paint.measureText(prefix);
+
+            for (int i = 0; i < width; i++) {
+                String oldDigit = String.valueOf(from.charAt(i));
+                String newDigit = String.valueOf(to.charAt(i));
+                float digitWidth = paint.measureText("8");
+                float centerX = x + digitWidth / 2f;
+                if (oldDigit.equals(newDigit) || rollProgress >= 1f) {
+                    canvas.drawText(newDigit, centerX, y, paint);
+                } else {
+                    float offset = rollProgress * getHeight();
+                    canvas.drawText(oldDigit, centerX, y - offset, paint);
+                    canvas.drawText(newDigit, centerX, y + getHeight() - offset, paint);
+                }
+                x += digitWidth;
+            }
+        }
+
+        private String leftPad(String value, int width) {
+            StringBuilder builder = new StringBuilder();
+            for (int i = value.length(); i < width; i++) {
+                builder.append(' ');
+            }
+            builder.append(value);
+            return builder.toString();
         }
     }
 
@@ -291,19 +542,19 @@ public class GameActivity extends Activity {
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            float size = Math.min(getWidth(), getHeight());
-            float cell = size / GameEngine.BOARD_SIZE;
+            float size = boardSize();
+            float cell = cellSize();
             float left = (getWidth() - size) / 2f;
             float top = (getHeight() - size) / 2f;
 
             paint.setStyle(Paint.Style.FILL);
-            paint.setColor(Color.rgb(31, 41, 55));
-            canvas.drawRoundRect(new RectF(left, top, left + size, top + size), dp(10), dp(10), paint);
+            paint.setColor(Color.rgb(15, 23, 42));
+            canvas.drawRoundRect(new RectF(left, top, left + size, top + size), dp(12), dp(12), paint);
 
             boolean[][] board = engine.copyBoard();
             for (int row = 0; row < GameEngine.BOARD_SIZE; row++) {
                 for (int col = 0; col < GameEngine.BOARD_SIZE; col++) {
-                    paint.setColor(board[row][col] ? Color.rgb(96, 165, 250) : Color.rgb(55, 65, 81));
+                    paint.setColor(board[row][col] ? Color.rgb(96, 165, 250) : Color.rgb(30, 41, 59));
                     float inset = dp(2);
                     canvas.drawRoundRect(
                             new RectF(left + col * cell + inset, top + row * cell + inset,
@@ -312,6 +563,14 @@ public class GameActivity extends Activity {
                 }
             }
             drawPreview(canvas, cell, left, top);
+        }
+
+        float cellSize() {
+            return boardSize() / GameEngine.BOARD_SIZE;
+        }
+
+        private float boardSize() {
+            return Math.min(getWidth(), getHeight());
         }
 
         private boolean handleDragEvent(DragEvent event) {
@@ -357,8 +616,8 @@ public class GameActivity extends Activity {
         }
 
         private int[] anchoredCellAt(int slot, float x, float y) {
-            float size = Math.min(getWidth(), getHeight());
-            float cell = size / GameEngine.BOARD_SIZE;
+            float size = boardSize();
+            float cell = cellSize();
             float left = (getWidth() - size) / 2f;
             float top = (getHeight() - size) / 2f;
             int col = (int) ((x - left) / cell);
@@ -374,7 +633,7 @@ public class GameActivity extends Activity {
         }
 
         private void drawPreview(Canvas canvas, float cellSize, float left, float top) {
-            if (previewSlot == GameEngine.NO_SELECTION || previewRow < 0 || previewCol < 0) {
+            if (previewSlot == GameEngine.NO_SELECTION) {
                 return;
             }
             BlockPiece piece = engine.getPiece(previewSlot);
@@ -382,7 +641,7 @@ public class GameActivity extends Activity {
                 return;
             }
             boolean canPlace = engine.canPlace(piece, previewRow, previewCol);
-            paint.setColor(canPlace ? Color.argb(150, 34, 197, 94) : Color.argb(150, 239, 68, 68));
+            paint.setColor(canPlace ? Color.argb(160, 34, 197, 94) : Color.argb(160, 239, 68, 68));
             for (BlockPiece.Cell cellPos : piece.getCells()) {
                 int row = previewRow + cellPos.row;
                 int col = previewCol + cellPos.col;
@@ -438,20 +697,18 @@ public class GameActivity extends Activity {
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
             BlockPiece piece = engine.getPiece(slot);
-            boolean selected = engine.getSelectedSlot() == slot;
             paint.setStyle(Paint.Style.FILL);
-            paint.setColor(selected ? Color.rgb(59, 130, 246) : Color.rgb(31, 41, 55));
-            canvas.drawRoundRect(new RectF(0, 0, getWidth(), getHeight()), dp(10), dp(10), paint);
+            paint.setColor(Color.argb(210, 15, 23, 42));
+            canvas.drawRoundRect(new RectF(0, 0, getWidth(), getHeight()), dp(12), dp(12), paint);
             if (piece == null) {
-                paint.setColor(Color.rgb(107, 114, 128));
+                paint.setColor(Color.rgb(203, 213, 225));
                 paint.setTextSize(dp(14));
                 paint.setTextAlign(Paint.Align.CENTER);
                 canvas.drawText("Placed", getWidth() / 2f, getHeight() / 2f + dp(5), paint);
                 return;
             }
 
-            float cellSize = Math.min(getWidth() / (piece.getWidth() + 1.5f),
-                    getHeight() / (piece.getHeight() + 1.5f));
+            float cellSize = boardView == null ? dp(40) : boardView.cellSize();
             float originX = (getWidth() - piece.getWidth() * cellSize) / 2f;
             float originY = (getHeight() - piece.getHeight() * cellSize) / 2f;
             paint.setColor(piece.getColor());
