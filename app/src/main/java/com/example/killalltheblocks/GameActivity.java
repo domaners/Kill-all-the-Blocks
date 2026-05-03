@@ -962,17 +962,32 @@ public class GameActivity extends Activity {
             if (piece == null) {
                 return new int[]{-1, -1};
             }
-            float visibleCenterX = left + (x - left) * 1.25f;
-            float visibleCenterY = top + (y - top) * 1.25f - dragHoverOffsetPx();
-            visibleCenterX = clamp(visibleCenterX, left, left + size - 1f);
-            visibleCenterY = clamp(visibleCenterY, top, top + size - 1f);
-            int col = (int) Math.floor((visibleCenterX - left) / cell);
-            int row = (int) Math.floor((visibleCenterY - top) / cell);
-            return new int[]{row, col - piece.getWidth() / 2};
+            float[] pieceTopLeft = draggedPieceTopLeft(slot, piece, x, y, cell);
+            float visibleLeft = clamp(pieceTopLeft[0], left, left + size - 1f);
+            float visibleTop = clamp(pieceTopLeft[1], top, top + size - 1f);
+            int col = (int) Math.floor((visibleLeft - left) / cell);
+            int row = (int) Math.floor((visibleTop - top) / cell);
+            return new int[]{row, col};
         }
 
         private float clamp(float value, float min, float max) {
             return Math.max(min, Math.min(max, value));
+        }
+
+        private float[] draggedPieceTopLeft(int slot, BlockPiece piece, float fingerX, float fingerY, float gridCellSize) {
+            View pieceView = pieceViews == null || slot < 0 || slot >= pieceViews.length ? null : pieceViews[slot];
+            float shadowWidth = pieceView == null ? piece.getWidth() * gridCellSize : Math.max(1, pieceView.getWidth());
+            float shadowHeight = pieceView == null ? piece.getHeight() * gridCellSize : Math.max(1, pieceView.getHeight());
+            float pieceCellSize = pieceView == null
+                    ? gridCellSize
+                    : Math.min(gridCellSize, Math.min(
+                            (shadowWidth - dp(4)) / Math.max(1, piece.getWidth()),
+                            (shadowHeight - dp(4)) / Math.max(1, piece.getHeight())));
+            float pieceOffsetX = (shadowWidth - piece.getWidth() * pieceCellSize) / 2f;
+            float pieceOffsetY = (shadowHeight - piece.getHeight() * pieceCellSize) / 2f;
+            float shadowLeft = fingerX - shadowWidth / 2f;
+            float shadowTop = fingerY - (shadowHeight / 2f + dragHoverOffsetPx());
+            return new float[]{shadowLeft + pieceOffsetX, shadowTop + pieceOffsetY};
         }
 
         private void drawPreview(Canvas canvas, float cellSize, float left, float top) {
