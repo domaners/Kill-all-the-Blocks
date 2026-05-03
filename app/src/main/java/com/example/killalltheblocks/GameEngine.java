@@ -10,6 +10,7 @@ public class GameEngine {
     public static final int NO_SELECTION = -1;
 
     private final boolean[][] board = new boolean[BOARD_SIZE][BOARD_SIZE];
+    private final int[][] boardColors = new int[BOARD_SIZE][BOARD_SIZE];
     private final Random random;
     private final BlockPiece[] tray = new BlockPiece[PIECE_SLOTS];
     private int score;
@@ -30,6 +31,14 @@ public class GameEngine {
         boolean[][] copy = new boolean[BOARD_SIZE][BOARD_SIZE];
         for (int row = 0; row < BOARD_SIZE; row++) {
             System.arraycopy(board[row], 0, copy[row], 0, BOARD_SIZE);
+        }
+        return copy;
+    }
+
+    public int[][] copyBoardColors() {
+        int[][] copy = new int[BOARD_SIZE][BOARD_SIZE];
+        for (int row = 0; row < BOARD_SIZE; row++) {
+            System.arraycopy(boardColors[row], 0, copy[row], 0, BOARD_SIZE);
         }
         return copy;
     }
@@ -87,6 +96,7 @@ public class GameEngine {
         lastClearedLines = 0;
         for (BlockPiece.Cell cell : piece.getCells()) {
             board[row + cell.row][col + cell.col] = true;
+            boardColors[row + cell.row][col + cell.col] = piece.getColor();
         }
         int clearedLines = clearCompletedLines();
         lastClearedLines = clearedLines;
@@ -143,6 +153,9 @@ public class GameEngine {
         for (boolean[] row : board) {
             Arrays.fill(row, false);
         }
+        for (int[] row : boardColors) {
+            Arrays.fill(row, 0);
+        }
         score = 0;
         selectedSlot = NO_SELECTION;
         finishedDurationMillis = 0L;
@@ -160,7 +173,24 @@ public class GameEngine {
         return builder.toString();
     }
 
+    public String encodeBoardColors() {
+        StringBuilder builder = new StringBuilder();
+        for (int row = 0; row < BOARD_SIZE; row++) {
+            for (int col = 0; col < BOARD_SIZE; col++) {
+                if (builder.length() > 0) {
+                    builder.append(',');
+                }
+                builder.append(boardColors[row][col]);
+            }
+        }
+        return builder.toString();
+    }
+
     public void restoreState(String encodedBoard, String[] pieceNames, int score, int selectedSlot) {
+        restoreState(encodedBoard, null, pieceNames, score, selectedSlot);
+    }
+
+    public void restoreState(String encodedBoard, String encodedColors, String[] pieceNames, int score, int selectedSlot) {
         if (encodedBoard == null || encodedBoard.length() != BOARD_SIZE * BOARD_SIZE
                 || pieceNames == null || pieceNames.length != PIECE_SLOTS) {
             reset();
@@ -170,8 +200,10 @@ public class GameEngine {
             for (int col = 0; col < BOARD_SIZE; col++) {
                 char value = encodedBoard.charAt(row * BOARD_SIZE + col);
                 board[row][col] = value == '1';
+                boardColors[row][col] = board[row][col] ? 0xff2563eb : 0;
             }
         }
+        restoreBoardColors(encodedColors);
         for (int slot = 0; slot < PIECE_SLOTS; slot++) {
             tray[slot] = BlockPiece.fromName(pieceNames[slot]);
         }
@@ -196,6 +228,7 @@ public class GameEngine {
 
     void setCellForTest(int row, int col, boolean filled) {
         board[row][col] = filled;
+        boardColors[row][col] = filled ? 0xff2563eb : 0;
     }
 
     void setPieceForTest(int slot, BlockPiece piece) {
@@ -251,6 +284,7 @@ public class GameEngine {
             for (int col = 0; col < BOARD_SIZE; col++) {
                 if (rowsToClear[row] || colsToClear[col]) {
                     board[row][col] = false;
+                    boardColors[row][col] = 0;
                 }
             }
         }
@@ -384,5 +418,25 @@ public class GameEngine {
             }
         }
         return lineCount;
+    }
+
+    private void restoreBoardColors(String encodedColors) {
+        if (encodedColors == null || encodedColors.length() == 0) {
+            return;
+        }
+        String[] values = encodedColors.split(",");
+        if (values.length != BOARD_SIZE * BOARD_SIZE) {
+            return;
+        }
+        for (int row = 0; row < BOARD_SIZE; row++) {
+            for (int col = 0; col < BOARD_SIZE; col++) {
+                int index = row * BOARD_SIZE + col;
+                try {
+                    boardColors[row][col] = board[row][col] ? Integer.parseInt(values[index]) : 0;
+                } catch (NumberFormatException ignored) {
+                    boardColors[row][col] = board[row][col] ? 0xff2563eb : 0;
+                }
+            }
+        }
     }
 }

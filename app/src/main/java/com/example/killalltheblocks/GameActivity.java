@@ -4,6 +4,7 @@ import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
@@ -43,6 +44,9 @@ public class GameActivity extends Activity {
     private TextView timerView;
     private TextView statusView;
     private long gameStartedAt;
+    private long activeElapsedMillis;
+    private long activeResumedAtMillis;
+    private boolean gameClockRunning;
     private boolean gameEnded;
 
     private final Runnable timerRunnable = new Runnable() {
@@ -70,8 +74,19 @@ public class GameActivity extends Activity {
 
     @Override
     protected void onPause() {
+        pauseGameClock();
         saveCurrentGame();
         super.onPause();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (boardView != null && !gameEnded) {
+            resumeGameClock();
+            timerHandler.removeCallbacks(timerRunnable);
+            timerHandler.post(timerRunnable);
+        }
     }
 
     private void showTitleScreen() {
@@ -248,10 +263,12 @@ public class GameActivity extends Activity {
     private void startNewGame() {
         engine.reset();
         gameStartedAt = System.currentTimeMillis();
+        activeElapsedMillis = 0L;
         gameEnded = false;
         setContentView(createGameView());
         saveCurrentGame();
         timerHandler.removeCallbacks(timerRunnable);
+        resumeGameClock();
         timerHandler.post(timerRunnable);
         refreshAll(false);
     }
@@ -262,12 +279,17 @@ public class GameActivity extends Activity {
             startNewGame();
             return;
         }
-        engine.restoreState(savedGame.encodedBoard, savedGame.pieceNames, savedGame.score, savedGame.selectedSlot);
+        engine.restoreState(savedGame.encodedBoard, savedGame.encodedBoardColors,
+                savedGame.pieceNames, savedGame.score, savedGame.selectedSlot);
         gameStartedAt = savedGame.startedAtMillis;
+        activeElapsedMillis = savedGame.elapsedMillis;
         gameEnded = savedGame.gameEnded;
         engine.setFinishedDurationMillis(savedGame.finishedDurationMillis);
         setContentView(createGameView());
         timerHandler.removeCallbacks(timerRunnable);
+        if (!gameEnded) {
+            resumeGameClock();
+        }
         timerHandler.post(timerRunnable);
         refreshAll(false);
     }
@@ -299,7 +321,7 @@ public class GameActivity extends Activity {
         if (timerView == null) {
             return;
         }
-        long duration = gameEnded ? engine.getFinishedDurationMillis() : System.currentTimeMillis() - gameStartedAt;
+        long duration = gameEnded ? engine.getFinishedDurationMillis() : currentElapsedMillis();
         timerView.setText("Time: " + formatDuration(duration));
     }
 
@@ -363,7 +385,8 @@ public class GameActivity extends Activity {
 
     private void finishGame() {
         gameEnded = true;
-        long duration = System.currentTimeMillis() - gameStartedAt;
+        pauseGameClock();
+        long duration = activeElapsedMillis;
         engine.setFinishedDurationMillis(duration);
         timerHandler.removeCallbacks(timerRunnable);
         scoreStore.addScore(engine.getScore(), System.currentTimeMillis(), duration);
@@ -390,8 +413,29 @@ public class GameActivity extends Activity {
 
     private void saveCurrentGame() {
         if (!gameEnded && gameStateStore != null && boardView != null) {
-            gameStateStore.save(engine, gameStartedAt, false);
+            gameStateStore.save(engine, gameStartedAt, currentElapsedMillis(), false);
         }
+    }
+
+    private void resumeGameClock() {
+        if (!gameClockRunning && !gameEnded) {
+            activeResumedAtMillis = System.currentTimeMillis();
+            gameClockRunning = true;
+        }
+    }
+
+    private void pauseGameClock() {
+        if (gameClockRunning) {
+            activeElapsedMillis += System.currentTimeMillis() - activeResumedAtMillis;
+            gameClockRunning = false;
+        }
+    }
+
+    private long currentElapsedMillis() {
+        if (!gameClockRunning) {
+            return activeElapsedMillis;
+        }
+        return activeElapsedMillis + (System.currentTimeMillis() - activeResumedAtMillis);
     }
 
     private final class PatternLayout extends LinearLayout {
@@ -547,15 +591,23 @@ public class GameActivity extends Activity {
             paint.setColor(Color.rgb(15, 23, 42));
             canvas.drawRoundRect(new RectF(left, top, left + size, top + size), dp(12), dp(12), paint);
 
-            boolean[][] board = engine.copyBoard();
+            int[][] boardColors = engine.copyBoardColors();
             for (int row = 0; row < GameEngine.BOARD_SIZE; row++) {
                 for (int col = 0; col < GameEngine.BOARD_SIZE; col++) {
-                    paint.setColor(board[row][col] ? Color.rgb(96, 165, 250) : Color.rgb(30, 41, 59));
+                    int color = boardColors[row][col];
+                    paint.setColor(color != 0 ? color : Color.rgb(18, 26, 45));
                     float inset = dp(2);
                     canvas.drawRoundRect(
                             new RectF(left + col * cell + inset, top + row * cell + inset,
                                     left + (col + 1) * cell - inset, top + (row + 1) * cell - inset),
                             dp(5), dp(5), paint);
+                    if (color != 0) {
+                        paint.setColor(Color.argb(95, 255, 255, 255));
+                        canvas.drawRoundRect(
+                                new RectF(left + col * cell + inset, top + row * cell + inset,
+                                        left + (col + 1) * cell - inset, top + row * cell + cell * 0.38f),
+                                dp(5), dp(5), paint);
+                    }
                 }
             }
             drawPreview(canvas, cell, left, top);
@@ -637,18 +689,27 @@ public class GameActivity extends Activity {
                 return;
             }
             boolean canPlace = engine.canPlace(piece, previewRow, previewCol);
-            paint.setColor(canPlace ? Color.argb(160, 34, 197, 94) : Color.argb(160, 239, 68, 68));
+            paint.setColor(canPlace ? Color.argb(225, 250, 204, 21) : Color.argb(225, 255, 23, 68));
             for (BlockPiece.Cell cellPos : piece.getCells()) {
                 int row = previewRow + cellPos.row;
                 int col = previewCol + cellPos.col;
                 if (row < 0 || row >= GameEngine.BOARD_SIZE || col < 0 || col >= GameEngine.BOARD_SIZE) {
                     continue;
                 }
-                float inset = dp(2);
+                float inset = dp(1);
                 canvas.drawRoundRect(
                         new RectF(left + col * cellSize + inset, top + row * cellSize + inset,
                                 left + (col + 1) * cellSize - inset, top + (row + 1) * cellSize - inset),
-                        dp(5), dp(5), paint);
+                        dp(7), dp(7), paint);
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(dp(3));
+                paint.setColor(Color.WHITE);
+                canvas.drawRoundRect(
+                        new RectF(left + col * cellSize + dp(3), top + row * cellSize + dp(3),
+                                left + (col + 1) * cellSize - dp(3), top + (row + 1) * cellSize - dp(3)),
+                        dp(7), dp(7), paint);
+                paint.setStyle(Paint.Style.FILL);
+                paint.setColor(canPlace ? Color.argb(225, 250, 204, 21) : Color.argb(225, 255, 23, 68));
             }
         }
 
@@ -671,7 +732,7 @@ public class GameActivity extends Activity {
                 if (event.getAction() == MotionEvent.ACTION_DOWN && !gameEnded && engine.getPiece(slot) != null) {
                     view.performClick();
                     ClipData dragData = ClipData.newPlainText(PIECE_DRAG_LABEL, String.valueOf(slot));
-                    View.DragShadowBuilder shadowBuilder = new CenteredPieceDragShadowBuilder(view);
+                    View.DragShadowBuilder shadowBuilder = new PieceDragShadowBuilder(view, engine.getPiece(slot));
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
                         view.startDragAndDrop(dragData, shadowBuilder, slot, 0);
                     } else {
@@ -707,36 +768,53 @@ public class GameActivity extends Activity {
             float cellSize = Math.min(gridCellSize, Math.min(maxCellWidth, maxCellHeight));
             float originX = (getWidth() - piece.getWidth() * cellSize) / 2f;
             float originY = (getHeight() - piece.getHeight() * cellSize) / 2f;
-            paint.setColor(piece.getColor());
-            for (BlockPiece.Cell cellPos : piece.getCells()) {
-                float x = originX + cellPos.col * cellSize;
-                float y = originY + cellPos.row * cellSize;
-                float inset = dp(2);
-                canvas.drawRoundRect(new RectF(x + inset, y + inset, x + cellSize - inset, y + cellSize - inset),
-                        dp(5), dp(5), paint);
-            }
+            drawPieceCells(canvas, paint, piece, cellSize, originX, originY, dp(2));
         }
     }
 
-    private static final class CenteredPieceDragShadowBuilder extends View.DragShadowBuilder {
-        private final View view;
+    private void drawPieceCells(Canvas canvas, Paint paint, BlockPiece piece, float cellSize,
+            float originX, float originY, float inset) {
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(piece.getColor());
+        for (BlockPiece.Cell cellPos : piece.getCells()) {
+            float x = originX + cellPos.col * cellSize;
+            float y = originY + cellPos.row * cellSize;
+            canvas.drawRoundRect(new RectF(x + inset, y + inset, x + cellSize - inset, y + cellSize - inset),
+                    dp(5), dp(5), paint);
+            paint.setColor(Color.argb(100, 255, 255, 255));
+            canvas.drawRoundRect(new RectF(x + inset, y + inset, x + cellSize - inset, y + cellSize * 0.38f),
+                    dp(5), dp(5), paint);
+            paint.setColor(piece.getColor());
+        }
+    }
 
-        CenteredPieceDragShadowBuilder(View view) {
+    private final class PieceDragShadowBuilder extends View.DragShadowBuilder {
+        private final BlockPiece piece;
+        private final Bitmap bitmap;
+
+        PieceDragShadowBuilder(View view, BlockPiece piece) {
             super(view);
-            this.view = view;
+            this.piece = piece;
+            bitmap = Bitmap.createBitmap(
+                    Math.max(1, view.getWidth()),
+                    Math.max(1, view.getHeight()),
+                    Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bitmap);
+            view.draw(canvas);
         }
 
         @Override
         public void onProvideShadowMetrics(Point shadowSize, Point shadowTouchPoint) {
-            int width = Math.max(1, view.getWidth());
-            int height = Math.max(1, view.getHeight());
+            int width = bitmap.getWidth();
+            int height = bitmap.getHeight();
             shadowSize.set(width, height);
             shadowTouchPoint.set(width / 2, height / 2);
         }
 
         @Override
         public void onDrawShadow(Canvas canvas) {
-            view.draw(canvas);
+            canvas.drawBitmap(bitmap, 0, 0, null);
         }
     }
+
 }

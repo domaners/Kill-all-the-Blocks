@@ -17,15 +17,17 @@ final class GameStateStore {
         preferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
     }
 
-    void save(GameEngine engine, long startedAtMillis, boolean gameEnded) {
+    void save(GameEngine engine, long startedAtMillis, long elapsedMillis, boolean gameEnded) {
         JSONObject state = new JSONObject();
         try {
             state.put("score", engine.getScore());
             state.put("selectedSlot", engine.getSelectedSlot());
             state.put("startedAtMillis", startedAtMillis);
+            state.put("elapsedMillis", elapsedMillis);
             state.put("finishedDurationMillis", engine.getFinishedDurationMillis());
             state.put("gameEnded", gameEnded);
             state.put("board", engine.encodeBoard());
+            state.put("boardColors", engine.encodeBoardColors());
 
             JSONArray tray = new JSONArray();
             String[] pieceNames = engine.getPieceNames();
@@ -47,6 +49,7 @@ final class GameStateStore {
         try {
             JSONObject state = new JSONObject(raw);
             String encodedBoard = state.getString("board");
+            String encodedBoardColors = state.optString("boardColors", "");
             String[] pieceNames = new String[GameEngine.PIECE_SLOTS];
             JSONArray trayValues = state.getJSONArray("tray");
             for (int slot = 0; slot < GameEngine.PIECE_SLOTS; slot++) {
@@ -55,11 +58,13 @@ final class GameStateStore {
 
             return new SavedGame(
                     encodedBoard,
+                    encodedBoardColors,
                     pieceNames,
                     state.getInt("score"),
                     state.optInt("selectedSlot", GameEngine.NO_SELECTION),
                     state.optLong("finishedDurationMillis", 0L),
                     state.optLong("startedAtMillis", System.currentTimeMillis()),
+                    state.optLong("elapsedMillis", 0L),
                     state.optBoolean("gameEnded", false));
         } catch (JSONException ignored) {
             return null;
@@ -72,27 +77,33 @@ final class GameStateStore {
 
     static final class SavedGame {
         final String encodedBoard;
+        final String encodedBoardColors;
         final String[] pieceNames;
         final int score;
         final int selectedSlot;
         final long finishedDurationMillis;
         final long startedAtMillis;
+        final long elapsedMillis;
         final boolean gameEnded;
 
         SavedGame(
                 String encodedBoard,
+                String encodedBoardColors,
                 String[] pieceNames,
                 int score,
                 int selectedSlot,
                 long finishedDurationMillis,
                 long startedAtMillis,
+                long elapsedMillis,
                 boolean gameEnded) {
             this.encodedBoard = encodedBoard;
+            this.encodedBoardColors = encodedBoardColors;
             this.pieceNames = pieceNames;
             this.score = score;
             this.selectedSlot = selectedSlot;
             this.finishedDurationMillis = finishedDurationMillis;
             this.startedAtMillis = startedAtMillis;
+            this.elapsedMillis = elapsedMillis;
             this.gameEnded = gameEnded;
         }
     }

@@ -93,28 +93,28 @@ final class BlockPiece {
 
     static List<BlockPiece> standardPieces() {
         List<BlockPiece> pieces = new ArrayList<>();
-        pieces.add(new BlockPiece("Single", new int[][]{{0, 0}}, 0xffef5350));
-        pieces.add(new BlockPiece("Two Vertical", new int[][]{{0, 0}, {1, 0}}, 0xffab47bc));
-        pieces.add(new BlockPiece("Two Horizontal", new int[][]{{0, 0}, {0, 1}}, 0xff5c6bc0));
-        pieces.add(new BlockPiece("Three Vertical", new int[][]{{0, 0}, {1, 0}, {2, 0}}, 0xff29b6f6));
-        pieces.add(new BlockPiece("Three Horizontal", new int[][]{{0, 0}, {0, 1}, {0, 2}}, 0xff26a69a));
-        pieces.add(new BlockPiece("Four Vertical", new int[][]{{0, 0}, {1, 0}, {2, 0}, {3, 0}}, 0xff66bb6a));
-        pieces.add(new BlockPiece("Four Horizontal", new int[][]{{0, 0}, {0, 1}, {0, 2}, {0, 3}}, 0xffffca28));
-        pieces.add(new BlockPiece("Five Horizontal", new int[][]{{0, 0}, {0, 1}, {0, 2}, {0, 3}, {0, 4}}, 0xffffee58));
-        pieces.add(new BlockPiece("Square 2x2", new int[][]{{0, 0}, {0, 1}, {1, 0}, {1, 1}}, 0xffff7043));
-        pieces.add(new BlockPiece("L Small", new int[][]{{0, 0}, {1, 0}, {1, 1}}, 0xff8d6e63));
-        pieces.add(new BlockPiece("L Mirror", new int[][]{{0, 1}, {1, 0}, {1, 1}}, 0xff78909c));
-        pieces.add(new BlockPiece("L Tall", new int[][]{{0, 0}, {1, 0}, {2, 0}, {2, 1}}, 0xffec407a));
-        pieces.add(new BlockPiece("L Tall Mirror", new int[][]{{0, 1}, {1, 1}, {2, 0}, {2, 1}}, 0xff7e57c2));
-        pieces.add(new BlockPiece("L 3x3", new int[][]{{0, 0}, {1, 0}, {2, 0}, {2, 1}, {2, 2}}, 0xffff8a65));
-        pieces.add(new BlockPiece("L 3x3 Flip Horizontal", new int[][]{{0, 2}, {1, 2}, {2, 0}, {2, 1}, {2, 2}}, 0xffba68c8));
-        pieces.add(new BlockPiece("L 3x3 Flip Vertical", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 0}, {2, 0}}, 0xff4dd0e1));
-        pieces.add(new BlockPiece("L 3x3 Flip Both", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 2}, {2, 2}}, 0xff81c784));
-        pieces.add(new BlockPiece("T", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 1}}, 0xff42a5f5));
-        pieces.add(new BlockPiece("Upside Down T Tall", new int[][]{{0, 1}, {1, 1}, {2, 0}, {2, 1}, {2, 2}}, 0xffffb74d));
-        pieces.add(new BlockPiece("Z", new int[][]{{0, 0}, {0, 1}, {1, 1}, {1, 2}}, 0xff26c6da));
-        pieces.add(new BlockPiece("S", new int[][]{{0, 1}, {0, 2}, {1, 0}, {1, 1}}, 0xff9ccc65));
-        pieces.add(new BlockPiece("Plus", new int[][]{{0, 1}, {1, 0}, {1, 1}, {1, 2}, {2, 1}}, 0xffffd54f));
+        pieces.add(new BlockPiece("Single", new int[][]{{0, 0}}, 0xffff1744));
+        pieces.add(new BlockPiece("Two Vertical", new int[][]{{0, 0}, {1, 0}}, 0xffd500f9));
+        pieces.add(new BlockPiece("Two Horizontal", new int[][]{{0, 0}, {0, 1}}, 0xff304ffe));
+        pieces.add(new BlockPiece("Three Vertical", new int[][]{{0, 0}, {1, 0}, {2, 0}}, 0xff00b0ff));
+        pieces.add(new BlockPiece("Three Horizontal", new int[][]{{0, 0}, {0, 1}, {0, 2}}, 0xff00c853));
+        pieces.add(new BlockPiece("Four Vertical", new int[][]{{0, 0}, {1, 0}, {2, 0}, {3, 0}}, 0xff64dd17));
+        pieces.add(new BlockPiece("Four Horizontal", new int[][]{{0, 0}, {0, 1}, {0, 2}, {0, 3}}, 0xffffd600));
+        pieces.add(new BlockPiece("Five Horizontal", new int[][]{{0, 0}, {0, 1}, {0, 2}, {0, 3}, {0, 4}}, 0xffffff00));
+        pieces.add(new BlockPiece("Square 2x2", new int[][]{{0, 0}, {0, 1}, {1, 0}, {1, 1}}, 0xffff6d00));
+        pieces.add(new BlockPiece("L Small", new int[][]{{0, 0}, {1, 0}, {1, 1}}, 0xff795548));
+        pieces.add(new BlockPiece("L Mirror", new int[][]{{0, 1}, {1, 0}, {1, 1}}, 0xff546e7a));
+        pieces.add(new BlockPiece("L Tall", new int[][]{{0, 0}, {1, 0}, {2, 0}, {2, 1}}, 0xffff4081));
+        pieces.add(new BlockPiece("L Tall Mirror", new int[][]{{0, 1}, {1, 1}, {2, 0}, {2, 1}}, 0xff651fff));
+        pieces.add(new BlockPiece("L 3x3", new int[][]{{0, 0}, {1, 0}, {2, 0}, {2, 1}, {2, 2}}, 0xffff3d00));
+        pieces.add(new BlockPiece("L 3x3 Flip Horizontal", new int[][]{{0, 2}, {1, 2}, {2, 0}, {2, 1}, {2, 2}}, 0xffaa00ff));
+        pieces.add(new BlockPiece("L 3x3 Flip Vertical", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 0}, {2, 0}}, 0xff00e5ff));
+        pieces.add(new BlockPiece("L 3x3 Flip Both", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 2}, {2, 2}}, 0xff00e676));
+        pieces.add(new BlockPiece("T", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 1}}, 0xff2979ff));
+        pieces.add(new BlockPiece("Upside Down T Tall", new int[][]{{0, 1}, {1, 1}, {2, 0}, {2, 1}, {2, 2}}, 0xffff9100));
+        pieces.add(new BlockPiece("Z", new int[][]{{0, 0}, {0, 1}, {1, 1}, {1, 2}}, 0xff00b8d4));
+        pieces.add(new BlockPiece("S", new int[][]{{0, 1}, {0, 2}, {1, 0}, {1, 1}}, 0xff76ff03));
+        pieces.add(new BlockPiece("Plus", new int[][]{{0, 1}, {1, 0}, {1, 1}, {1, 2}, {2, 1}}, 0xffffea00));
         return Collections.unmodifiableList(pieces);
     }
 }
