@@ -45,9 +45,19 @@ public class GameEngineTest {
         assertTrue(engine.placePiece(0, 0, GameEngine.BOARD_SIZE - 1));
 
         assertEquals(11, engine.getScore());
+        assertEquals(1, engine.getLastClearedLines());
         boolean[][] board = engine.copyBoard();
         for (int col = 0; col < GameEngine.BOARD_SIZE; col++) {
             assertFalse(board[0][col]);
+        }
+    }
+
+    @Test
+    public void newTrayCanBePlacedSequentiallyOnCurrentBoard() {
+        for (int seed = 0; seed < 50; seed++) {
+            GameEngine engine = new GameEngine(new Random(seed));
+
+            assertTrue(engine.hasSequentialTrayPlacement());
         }
     }
 
