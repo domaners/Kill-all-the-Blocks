@@ -29,7 +29,7 @@ public class GameEngineTest {
 
         assertTrue(engine.placePiece(0, 0, 0));
 
-        assertEquals(piece.getCellCount(), engine.getScore());
+        assertEquals(piece.getCellCount() * 10, engine.getScore());
         assertFalse(engine.canPlace(piece, 0, 0));
         assertEquals(null, engine.getPiece(0));
         assertEquals(piece.getColor(), engine.copyBoardColors()[0][0]);
@@ -46,7 +46,7 @@ public class GameEngineTest {
 
         assertTrue(engine.placePiece(0, 0, GameEngine.BOARD_SIZE - 1));
 
-        assertEquals(11, engine.getScore());
+        assertEquals(110, engine.getScore());
         assertEquals(1, engine.getLastClearedLines());
         assertTrue(engine.getLastClearedRowsCopy()[0]);
         boolean[][] board = engine.copyBoard();
@@ -73,7 +73,35 @@ public class GameEngineTest {
         assertEquals(2, engine.getLastClearedLines());
         assertTrue(engine.getLastClearedRowsCopy()[0]);
         assertTrue(engine.getLastClearedColsCopy()[GameEngine.BOARD_SIZE - 1]);
-        assertEquals(82, engine.getScore());
+        assertEquals(820, engine.getScore());
+        assertEquals(2, engine.getLastAppliedMultiplier());
+    }
+
+    @Test
+    public void consecutiveLineClearsIncreaseMultiplierAndResetOnMiss() {
+        GameEngine engine = new GameEngine(new Random(11));
+        BlockPiece single = new BlockPiece("Single", new int[][]{{0, 0}}, 0xffffffff);
+
+        for (int col = 0; col < GameEngine.BOARD_SIZE - 1; col++) {
+            engine.setCellForTest(0, col, true);
+        }
+        engine.setPieceForTest(0, single);
+        assertTrue(engine.placePiece(0, 0, GameEngine.BOARD_SIZE - 1));
+        assertEquals(1, engine.getComboStreak());
+        assertEquals(1, engine.getLastAppliedMultiplier());
+
+        for (int col = 0; col < GameEngine.BOARD_SIZE - 1; col++) {
+            engine.setCellForTest(1, col, true);
+        }
+        engine.setPieceForTest(0, single);
+        assertTrue(engine.placePiece(0, 1, GameEngine.BOARD_SIZE - 1));
+        assertEquals(2, engine.getComboStreak());
+        assertEquals(2, engine.getLastAppliedMultiplier());
+
+        engine.setPieceForTest(0, single);
+        assertTrue(engine.placePiece(0, 2, 0));
+        assertEquals(0, engine.getComboStreak());
+        assertEquals(1, engine.getLastAppliedMultiplier());
     }
 
     @Test

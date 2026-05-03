@@ -17,6 +17,8 @@ public class GameEngine {
     private int selectedSlot = NO_SELECTION;
     private long finishedDurationMillis;
     private int lastClearedLines;
+    private int consecutiveLineClearStreak;
+    private int lastScoreMultiplier = 1;
     private final boolean[] lastClearedRows = new boolean[BOARD_SIZE];
     private final boolean[] lastClearedCols = new boolean[BOARD_SIZE];
 
@@ -68,6 +70,22 @@ public class GameEngine {
         return lastClearedLines;
     }
 
+    public int getLastScoreMultiplier() {
+        return lastScoreMultiplier;
+    }
+
+    public int getLastAppliedMultiplier() {
+        return lastScoreMultiplier;
+    }
+
+    public int getConsecutiveLineClearStreak() {
+        return consecutiveLineClearStreak;
+    }
+
+    public int getComboStreak() {
+        return consecutiveLineClearStreak;
+    }
+
     public boolean[] getLastClearedRowsCopy() {
         return Arrays.copyOf(lastClearedRows, lastClearedRows.length);
     }
@@ -110,8 +128,15 @@ public class GameEngine {
         }
         int clearedLines = clearCompletedLines();
         lastClearedLines = clearedLines;
-        int lineMultiplier = Math.max(1, clearedLines);
-        score += piece.getCellCount() + (clearedLines * clearedLines * 10 * lineMultiplier);
+        if (clearedLines > 0) {
+            consecutiveLineClearStreak++;
+        } else {
+            consecutiveLineClearStreak = 0;
+        }
+        int simultaneousMultiplier = Math.max(1, clearedLines);
+        int streakMultiplier = Math.max(1, consecutiveLineClearStreak);
+        lastScoreMultiplier = simultaneousMultiplier * streakMultiplier;
+        score += (piece.getCellCount() * 10) + (clearedLines * clearedLines * 100 * lastScoreMultiplier);
         tray[trayIndex] = null;
         selectedSlot = NO_SELECTION;
         if (isTrayEmpty()) {
@@ -186,6 +211,8 @@ public class GameEngine {
         score = 0;
         selectedSlot = NO_SELECTION;
         finishedDurationMillis = 0L;
+        consecutiveLineClearStreak = 0;
+        lastScoreMultiplier = 1;
         clearLastClearedLines();
         refillTray();
     }
@@ -218,6 +245,11 @@ public class GameEngine {
     }
 
     public void restoreState(String encodedBoard, String encodedColors, String[] pieceNames, int score, int selectedSlot) {
+        restoreState(encodedBoard, encodedColors, pieceNames, score, selectedSlot, 0);
+    }
+
+    public void restoreState(String encodedBoard, String encodedColors, String[] pieceNames, int score,
+            int selectedSlot, int consecutiveLineClearStreak) {
         if (encodedBoard == null || encodedBoard.length() != BOARD_SIZE * BOARD_SIZE
                 || pieceNames == null || pieceNames.length != PIECE_SLOTS) {
             reset();
@@ -238,6 +270,8 @@ public class GameEngine {
         this.selectedSlot = selectedSlot >= 0 && selectedSlot < PIECE_SLOTS && tray[selectedSlot] != null
                 ? selectedSlot
                 : NO_SELECTION;
+        this.consecutiveLineClearStreak = Math.max(0, consecutiveLineClearStreak);
+        lastScoreMultiplier = 1;
         finishedDurationMillis = 0L;
         clearLastClearedLines();
         if (isTrayEmpty()) {
