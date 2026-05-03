@@ -56,6 +56,10 @@ public class ScoreStore {
         return addScore(entry.getScore(), entry.getFinishedAtMillis(), entry.getDurationMillis());
     }
 
+    public void clearScores() {
+        preferences.edit().remove(KEY_TOP_SCORES).apply();
+    }
+
     private void saveScores(List<ScoreEntry> scores) {
         JSONArray array = new JSONArray();
         for (ScoreEntry score : scores) {
