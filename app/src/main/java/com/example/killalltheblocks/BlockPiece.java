@@ -102,6 +102,14 @@ final class BlockPiece {
         pieces.add(new BlockPiece("Four Horizontal", new int[][]{{0, 0}, {0, 1}, {0, 2}, {0, 3}}, 0xffffd600));
         pieces.add(new BlockPiece("Five Horizontal", new int[][]{{0, 0}, {0, 1}, {0, 2}, {0, 3}, {0, 4}}, 0xffffff00));
         pieces.add(new BlockPiece("Square 2x2", new int[][]{{0, 0}, {0, 1}, {1, 0}, {1, 1}}, 0xffff6d00));
+        pieces.add(new BlockPiece("Square 3x3", new int[][]{
+                {0, 0}, {0, 1}, {0, 2},
+                {1, 0}, {1, 1}, {1, 2},
+                {2, 0}, {2, 1}, {2, 2}}, 0xfff50057));
+        pieces.add(new BlockPiece("Two Diagonal Down", new int[][]{{0, 0}, {1, 1}}, 0xff00e5ff));
+        pieces.add(new BlockPiece("Two Diagonal Up", new int[][]{{0, 1}, {1, 0}}, 0xff1de9b6));
+        pieces.add(new BlockPiece("Three Diagonal Down", new int[][]{{0, 0}, {1, 1}, {2, 2}}, 0xffc6ff00));
+        pieces.add(new BlockPiece("Three Diagonal Up", new int[][]{{0, 2}, {1, 1}, {2, 0}}, 0xffffab00));
         pieces.add(new BlockPiece("L Small", new int[][]{{0, 0}, {1, 0}, {1, 1}}, 0xff795548));
         pieces.add(new BlockPiece("L Mirror", new int[][]{{0, 1}, {1, 0}, {1, 1}}, 0xff546e7a));
         pieces.add(new BlockPiece("L Tall", new int[][]{{0, 0}, {1, 0}, {2, 0}, {2, 1}}, 0xffff4081));
