@@ -959,9 +959,9 @@ public class GameActivity extends Activity {
                 return new int[]{-1, -1};
             }
             float anchorX = x;
-            float anchorY = y - piece.getHeight() * cell * 5.5f;
-            float snapX = x + (anchorX - x) * 1.4f;
-            float snapY = y + (anchorY - y) * 1.4f;
+            float anchorY = y - piece.getHeight() * cell * 0.55f;
+            float snapX = x + (anchorX - x) * 1.18f;
+            float snapY = y + (anchorY - y) * 1.18f;
             int col = (int) ((snapX - left) / cell);
             int row = (int) ((snapY - top) / cell);
             if (row < 0 || row >= GameEngine.BOARD_SIZE || col < 0 || col >= GameEngine.BOARD_SIZE) {
@@ -1239,7 +1239,7 @@ public class GameActivity extends Activity {
             int width = bitmap.getWidth();
             int height = bitmap.getHeight();
             shadowSize.set(width, height);
-            shadowTouchPoint.set(width / 2, Math.max(1, height * 10));
+            shadowTouchPoint.set(width / 2, Math.max(1, height));
         }
 
         @Override
