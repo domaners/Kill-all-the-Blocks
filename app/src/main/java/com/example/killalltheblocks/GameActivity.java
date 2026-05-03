@@ -616,6 +616,10 @@ public class GameActivity extends Activity {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
+    private float dragHoverOffsetPx() {
+        return getResources().getDisplayMetrics().heightPixels * 0.15f;
+    }
+
     private String getVersionName() {
         try {
             PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
@@ -958,12 +962,10 @@ public class GameActivity extends Activity {
             if (piece == null) {
                 return new int[]{-1, -1};
             }
-            float anchorX = x;
-            float anchorY = y - piece.getHeight() * cell * 0.55f;
-            float snapX = x + (anchorX - x) * 1.18f;
-            float snapY = y + (anchorY - y) * 1.18f;
-            int col = (int) ((snapX - left) / cell);
-            int row = (int) ((snapY - top) / cell);
+            float visibleCenterX = x;
+            float visibleCenterY = y - dragHoverOffsetPx();
+            int col = (int) Math.floor((visibleCenterX - left) / cell);
+            int row = (int) Math.floor((visibleCenterY - top) / cell);
             if (row < 0 || row >= GameEngine.BOARD_SIZE || col < 0 || col >= GameEngine.BOARD_SIZE) {
                 return new int[]{-1, -1};
             }
@@ -1239,7 +1241,7 @@ public class GameActivity extends Activity {
             int width = bitmap.getWidth();
             int height = bitmap.getHeight();
             shadowSize.set(width, height);
-            shadowTouchPoint.set(width / 2, Math.max(1, height));
+            shadowTouchPoint.set(width / 2, Math.max(1, Math.round(height / 2f + dragHoverOffsetPx())));
         }
 
         @Override
