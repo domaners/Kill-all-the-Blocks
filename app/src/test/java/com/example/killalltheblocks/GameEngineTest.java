@@ -24,13 +24,15 @@ public class GameEngineTest {
     @Test
     public void placePieceAddsCellScoreAndClearsSlot() {
         GameEngine engine = new GameEngine(new Random(2));
-        BlockPiece piece = engine.getPiece(0);
+        BlockPiece piece = new BlockPiece("Test Single", new int[][]{{0, 0}}, 0xff123456);
+        engine.setPieceForTest(0, piece);
 
         assertTrue(engine.placePiece(0, 0, 0));
 
         assertEquals(piece.getCellCount(), engine.getScore());
         assertFalse(engine.canPlace(piece, 0, 0));
         assertEquals(null, engine.getPiece(0));
+        assertEquals(piece.getColor(), engine.copyBoardColors()[0][0]);
     }
 
     @Test
@@ -126,5 +128,23 @@ public class GameEngineTest {
         assertEquals(original.getPiece(0), restored.getPiece(0));
         assertEquals(original.getPiece(1), restored.getPiece(1));
         assertEquals(original.getPiece(2), restored.getPiece(2));
+    }
+
+    @Test
+    public void restoresPlacedBlockColors() {
+        GameEngine original = new GameEngine(new Random(8));
+        BlockPiece piece = new BlockPiece("Test Single", new int[][]{{0, 0}}, 0xffabcdef);
+        original.setPieceForTest(0, piece);
+        assertTrue(original.placePiece(0, 0, 0));
+
+        GameEngine restored = new GameEngine(new Random(9));
+        restored.restoreState(
+                original.encodeBoard(),
+                original.encodeBoardColors(),
+                original.getPieceNames(),
+                original.getScore(),
+                original.getSelectedSlot());
+
+        assertEquals(piece.getColor(), restored.copyBoardColors()[0][0]);
     }
 }
