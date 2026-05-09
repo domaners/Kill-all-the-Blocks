@@ -367,7 +367,8 @@ public class GameEngine {
         for (int attempt = 0; attempt < 500; attempt++) {
             BlockPiece[] candidate = new BlockPiece[PIECE_SLOTS];
             for (int i = 0; i < candidate.length; i++) {
-                candidate[i] = pieces.get(random.nextInt(pieces.size()));
+                // Added to retrieve weighted random pieces
+                candidate[i] = getWeightedRandomPiece(pieces);
             }
             if (canPlaceAll(candidate)) {
                 System.arraycopy(candidate, 0, tray, 0, tray.length);
@@ -507,5 +508,43 @@ public class GameEngine {
                 }
             }
         }
+    }
+
+    // Added make block selection slightly less random
+    private BlockPiece getWeightedRandomPiece(List<BlockPiece> pieces) {
+        double totalWeight = 0.0;
+        double[] weights = new double[pieces.size()];
+
+        for (int i = 0; i < pieces.size(); i++) {
+            BlockPiece p = pieces.get(i);
+            int tileCount = p.getCellCount();
+
+            double weight;
+            // Adjust these thresholds based on your current scoring balance
+            if (tileCount <= 2) {
+                // "Easy" pieces: Weight starts high (100) and decreases as score rises
+                weight = Math.max(10.0, 100.0 - (this.score / 150.0));
+            } else if (tileCount <= 4) {
+                // "Medium" pieces: Weight stays relatively stable
+                weight = 50.0;
+            } else {
+                // "Hard" pieces (5+ tiles): Weight starts low (5) and increases with score
+                weight = Math.min(90.0, 5.0 + (this.score / 100.0));
+            }
+
+            weights[i] = weight;
+            totalWeight += weight;
+        }
+
+        // Weighted Random Selection
+        double r = random.nextDouble() * totalWeight;
+        double countWeight = 0.0;
+        for (int i = 0; i < pieces.size(); i++) {
+            countWeight += weights[i];
+            if (countWeight >= r) {
+                return pieces.get(i);
+            }
+        }
+        return pieces.get(0); // Fallback
     }
 }
