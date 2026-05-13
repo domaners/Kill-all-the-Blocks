@@ -510,7 +510,11 @@ public class GameEngine {
         }
     }
 
-    // Added make block selection slightly less random
+    /**
+     * Selects a random piece from the provided list using a weighted probability system.
+     * The probability of a piece being selected is influenced by its size relative to the
+     * current score, as well as its potential to clear multiple lines at once.
+     */
     private BlockPiece getWeightedRandomPiece(List<BlockPiece> pieces) {
         double totalWeight = 0.0;
         double[] weights = new double[pieces.size()];
@@ -520,23 +524,44 @@ public class GameEngine {
             int tileCount = p.getCellCount();
 
             double weight;
-            // Adjust these thresholds based on your current scoring balance
+            // Base weight logic based on piece difficulty and player's current score
             if (tileCount <= 2) {
-                // "Easy" pieces: Weight starts high (100) and decreases as score rises
+                // "Easy" pieces (1-2 cells): Probability decreases as the score increases
+                // to make the game more challenging over time.
                 weight = Math.max(10.0, 100.0 - (this.score / 150.0));
             } else if (tileCount <= 4) {
-                // "Medium" pieces: Weight stays relatively stable
+                // "Medium" pieces (3-4 cells): Probability stays constant.
                 weight = 50.0;
             } else {
-                // "Hard" pieces (5+ tiles): Weight starts low (5) and increases with score
+                // "Hard" pieces (5+ cells): Probability increases as the score increases,
+                // giving the player more complex pieces to handle as they progress.
                 weight = Math.min(90.0, 5.0 + (this.score / 100.0));
             }
+
+            // Multiline Potential Bonus: Increase the probability for pieces that are 
+            // useful for clearing multiple rows or columns simultaneously.
+            double multilineMultiplier = 1.0;
+            
+            // Boost pieces that span at least 3 cells vertically or horizontally (e.g., long bars).
+            if (p.getWidth() >= 3 || p.getHeight() >= 3) {
+                multilineMultiplier += 0.5; // Increases likelihood by 50%
+            }
+            
+            // Boost "chunky" pieces that cover at least a 2x2 area (e.g., squares).
+            if (p.getWidth() >= 2 && p.getHeight() >= 2) {
+                multilineMultiplier += 0.3; // Increases likelihood by 30%
+            }
+            
+            // Apply the multiline potential multipliers to the base difficulty weight.
+            weight *= multilineMultiplier;
 
             weights[i] = weight;
             totalWeight += weight;
         }
 
-        // Weighted Random Selection
+        // Standard weighted random selection:
+        // 1. Pick a random value between 0 and the sum of all weights.
+        // 2. Iterate through weights and subtract/accumulate until that value is reached.
         double r = random.nextDouble() * totalWeight;
         double countWeight = 0.0;
         for (int i = 0; i < pieces.size(); i++) {
@@ -545,6 +570,6 @@ public class GameEngine {
                 return pieces.get(i);
             }
         }
-        return pieces.get(0); // Fallback
+        return pieces.get(0); // Fallback in case of rounding errors
     }
 }
