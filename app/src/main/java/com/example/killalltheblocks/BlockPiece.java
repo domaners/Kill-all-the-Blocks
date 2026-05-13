@@ -106,6 +106,13 @@ final class BlockPiece {
                 {0, 0}, {0, 1}, {0, 2},
                 {1, 0}, {1, 1}, {1, 2},
                 {2, 0}, {2, 1}, {2, 2}}, 0xfff50057));
+        pieces.add(new BlockPiece("Rectangle 2x3", new int[][]{
+                {0, 0}, {0, 1}, {0, 2},
+                {1, 0}, {1, 1}, {1, 2}}, 0xff3d5afe));
+        pieces.add(new BlockPiece("Rectangle 3x2", new int[][]{
+                {0, 0}, {0, 1},
+                {1, 0}, {1, 1},
+                {2, 0}, {2, 1}}, 0xfff44336));
         pieces.add(new BlockPiece("Two Diagonal Down", new int[][]{{0, 0}, {1, 1}}, 0xff00e5ff));
         pieces.add(new BlockPiece("Two Diagonal Up", new int[][]{{0, 1}, {1, 0}}, 0xff1de9b6));
         pieces.add(new BlockPiece("Three Diagonal Down", new int[][]{{0, 0}, {1, 1}, {2, 2}}, 0xffc6ff00));
@@ -118,8 +125,6 @@ final class BlockPiece {
         pieces.add(new BlockPiece("L 3x3 Flip Horizontal", new int[][]{{0, 2}, {1, 2}, {2, 0}, {2, 1}, {2, 2}}, 0xffaa00ff));
         pieces.add(new BlockPiece("L 3x3 Flip Vertical", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 0}, {2, 0}}, 0xff00e5ff));
         pieces.add(new BlockPiece("L 3x3 Flip Both", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 2}, {2, 2}}, 0xff00e676));
-        pieces.add(new BlockPiece("T", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 1}}, 0xff2979ff));
-        pieces.add(new BlockPiece("Upside Down T Tall", new int[][]{{0, 1}, {1, 1}, {2, 0}, {2, 1}, {2, 2}}, 0xffff9100));
         pieces.add(new BlockPiece("Z", new int[][]{{0, 0}, {0, 1}, {1, 1}, {1, 2}}, 0xff00b8d4));
         pieces.add(new BlockPiece("S", new int[][]{{0, 1}, {0, 2}, {1, 0}, {1, 1}}, 0xff76ff03));
         return Collections.unmodifiableList(pieces);
