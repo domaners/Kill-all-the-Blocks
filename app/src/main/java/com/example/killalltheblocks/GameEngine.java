@@ -19,6 +19,7 @@ public class GameEngine {
     private int lastClearedLines;
     private int consecutiveLineClearStreak;
     private int lastScoreMultiplier = 1;
+    private int boardClearCount;
     private final boolean[] lastClearedRows = new boolean[BOARD_SIZE];
     private final boolean[] lastClearedCols = new boolean[BOARD_SIZE];
 
@@ -86,6 +87,21 @@ public class GameEngine {
         return consecutiveLineClearStreak;
     }
 
+    public int getBoardClearCount() {
+        return boardClearCount;
+    }
+
+    public boolean isBoardEmpty() {
+        for (int row = 0; row < BOARD_SIZE; row++) {
+            for (int col = 0; col < BOARD_SIZE; col++) {
+                if (board[row][col]) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     public boolean[] getLastClearedRowsCopy() {
         return Arrays.copyOf(lastClearedRows, lastClearedRows.length);
     }
@@ -137,6 +153,14 @@ public class GameEngine {
         int streakMultiplier = Math.max(1, consecutiveLineClearStreak);
         lastScoreMultiplier = simultaneousMultiplier * streakMultiplier;
         score += (piece.getCellCount() * 10) + (clearedLines * clearedLines * 100 * lastScoreMultiplier);
+
+        // Board Clear Bonus
+        if (clearedLines > 0 && isBoardEmpty()) {
+            boardClearCount++;
+            int clearBonus = boardClearCount * 1000;
+            score += clearBonus;
+        }
+
         tray[trayIndex] = null;
         selectedSlot = NO_SELECTION;
         if (isTrayEmpty()) {
@@ -213,6 +237,7 @@ public class GameEngine {
         finishedDurationMillis = 0L;
         consecutiveLineClearStreak = 0;
         lastScoreMultiplier = 1;
+        boardClearCount = 0;
         clearLastClearedLines();
         refillTray();
     }
@@ -250,6 +275,11 @@ public class GameEngine {
 
     public void restoreState(String encodedBoard, String encodedColors, String[] pieceNames, int score,
             int selectedSlot, int consecutiveLineClearStreak) {
+        restoreState(encodedBoard, encodedColors, pieceNames, score, selectedSlot, consecutiveLineClearStreak, 0);
+    }
+
+    public void restoreState(String encodedBoard, String encodedColors, String[] pieceNames, int score,
+            int selectedSlot, int consecutiveLineClearStreak, int boardClearCount) {
         if (encodedBoard == null || encodedBoard.length() != BOARD_SIZE * BOARD_SIZE
                 || pieceNames == null || pieceNames.length != PIECE_SLOTS) {
             reset();
@@ -271,6 +301,7 @@ public class GameEngine {
                 ? selectedSlot
                 : NO_SELECTION;
         this.consecutiveLineClearStreak = Math.max(0, consecutiveLineClearStreak);
+        this.boardClearCount = Math.max(0, boardClearCount);
         lastScoreMultiplier = 1;
         finishedDurationMillis = 0L;
         clearLastClearedLines();
@@ -510,11 +541,7 @@ public class GameEngine {
         }
     }
 
-    /**
-     * Selects a random piece from the provided list using a weighted probability system.
-     * The probability of a piece being selected is influenced by its size relative to the
-     * current score, as well as its potential to clear multiple lines at once.
-     */
+    // Added make block selection slightly less random
     private BlockPiece getWeightedRandomPiece(List<BlockPiece> pieces) {
         double totalWeight = 0.0;
         double[] weights = new double[pieces.size()];
@@ -544,12 +571,13 @@ public class GameEngine {
             
             // Boost pieces that span at least 3 cells vertically or horizontally (e.g., long bars).
             if (p.getWidth() >= 3 || p.getHeight() >= 3) {
-                multilineMultiplier += 0.5; // Increases likelihood by 50%
+                // Likelihood increases even more if the board is empty or nearly empty
+                multilineMultiplier += isBoardEmpty() ? 1.0 : 0.5;
             }
             
             // Boost "chunky" pieces that cover at least a 2x2 area (e.g., squares).
             if (p.getWidth() >= 2 && p.getHeight() >= 2) {
-                multilineMultiplier += 0.3; // Increases likelihood by 30%
+                multilineMultiplier += 0.3;
             }
             
             // Apply the multiline potential multipliers to the base difficulty weight.

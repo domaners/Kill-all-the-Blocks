@@ -22,6 +22,7 @@ final class GameStateStore {
         try {
             state.put("score", engine.getScore());
             state.put("comboStreak", engine.getComboStreak());
+            state.put("boardClearCount", engine.getBoardClearCount());
             state.put("selectedSlot", engine.getSelectedSlot());
             state.put("startedAtMillis", startedAtMillis);
             state.put("elapsedMillis", elapsedMillis);
@@ -63,6 +64,7 @@ final class GameStateStore {
                     pieceNames,
                     state.getInt("score"),
                     state.optInt("comboStreak", 0),
+                    state.optInt("boardClearCount", 0),
                     state.optInt("selectedSlot", GameEngine.NO_SELECTION),
                     state.optLong("finishedDurationMillis", 0L),
                     state.optLong("startedAtMillis", System.currentTimeMillis()),
@@ -83,6 +85,7 @@ final class GameStateStore {
         final String[] pieceNames;
         final int score;
         final int comboStreak;
+        final int boardClearCount;
         final int selectedSlot;
         final long finishedDurationMillis;
         final long startedAtMillis;
@@ -95,6 +98,7 @@ final class GameStateStore {
                 String[] pieceNames,
                 int score,
                 int comboStreak,
+                int boardClearCount,
                 int selectedSlot,
                 long finishedDurationMillis,
                 long startedAtMillis,
@@ -105,6 +109,7 @@ final class GameStateStore {
             this.pieceNames = pieceNames;
             this.score = score;
             this.comboStreak = comboStreak;
+            this.boardClearCount = boardClearCount;
             this.selectedSlot = selectedSlot;
             this.finishedDurationMillis = finishedDurationMillis;
             this.startedAtMillis = startedAtMillis;

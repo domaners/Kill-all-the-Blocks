@@ -59,9 +59,6 @@ public class GameActivity extends Activity {
             0.13f, 0.74f, 0.39f, 0.91f, 0.44f, 0.56f, 0.84f, 0.29f, 0.93f, 0.58f,
             0.04f, 0.32f, 0.72f, 0.18f
     };
-    private static final float DRAG_SHADOW_TOUCH_X = 0.5f;
-    private static final float DRAG_SHADOW_TOUCH_Y = 1.15f;
-    private static final float DRAG_BOARD_SPEED = 1.12f;
 
     private final Handler timerHandler = new Handler(Looper.getMainLooper());
     private final GameEngine engine = new GameEngine();
@@ -458,7 +455,7 @@ public class GameActivity extends Activity {
             return;
         }
         engine.restoreState(savedGame.encodedBoard, savedGame.encodedBoardColors,
-                savedGame.pieceNames, savedGame.score, savedGame.selectedSlot, savedGame.comboStreak);
+                savedGame.pieceNames, savedGame.score, savedGame.selectedSlot, savedGame.comboStreak, savedGame.boardClearCount);
         gameStartedAt = savedGame.startedAtMillis;
         activeElapsedMillis = savedGame.elapsedMillis;
         gameEnded = savedGame.gameEnded;
@@ -547,8 +544,9 @@ public class GameActivity extends Activity {
         int clearedLines = engine.getLastClearedLines();
         playTone(ToneGenerator.TONE_PROP_BEEP);
         if (clearedLines > 0) {
+            boolean boardCleared = engine.isBoardEmpty();
             int multiplier = engine.getLastScoreMultiplier();
-            boardView.triggerClearAnimations(clearedLines, multiplier);
+            boardView.triggerClearAnimations(multiplier, boardCleared);
             performClearHaptics(multiplier);
             playTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD);
             shakeBoard();
@@ -988,15 +986,21 @@ public class GameActivity extends Activity {
             View pieceView = pieceViews == null || slot < 0 || slot >= pieceViews.length ? null : pieceViews[slot];
             float shadowWidth = pieceView == null ? piece.getWidth() * gridCellSize : Math.max(1, pieceView.getWidth());
             float shadowHeight = pieceView == null ? piece.getHeight() * gridCellSize : Math.max(1, pieceView.getHeight());
+            
+            // Adjust pieceCellSize to better match gridCellSize
             float pieceCellSize = pieceView == null
                     ? gridCellSize
                     : Math.min(gridCellSize, Math.min(
                             (shadowWidth - dp(4)) / Math.max(1, piece.getWidth()),
                             (shadowHeight - dp(4)) / Math.max(1, piece.getHeight())));
+            
             float pieceOffsetX = (shadowWidth - piece.getWidth() * pieceCellSize) / 2f;
             float pieceOffsetY = (shadowHeight - piece.getHeight() * pieceCellSize) / 2f;
+            
+            // Center the piece shadow exactly under the finger
             float shadowLeft = fingerX - shadowWidth / 2f;
             float shadowTop = fingerY - (shadowHeight / 2f + dragHoverOffsetPx());
+            
             return new float[]{shadowLeft + pieceOffsetX, shadowTop + pieceOffsetY};
         }
 
@@ -1040,7 +1044,7 @@ public class GameActivity extends Activity {
             invalidate();
         }
 
-        void triggerClearAnimations(int clearedLines, int multiplier) {
+        void triggerClearAnimations(int multiplier, boolean boardCleared) {
             flashingRows = engine.getLastClearedRowsCopy();
             flashingCols = engine.getLastClearedColsCopy();
             if (clearFlashAnimator != null) {
@@ -1054,11 +1058,17 @@ public class GameActivity extends Activity {
             });
             clearFlashAnimator.start();
 
-            if (multiplier > 1) {
-                String praise = PRAISE_TEXT.length == 0
-                        ? "Great!"
-                        : PRAISE_TEXT[praiseRandom.nextInt(PRAISE_TEXT.length)];
-                praiseText = praise + " x" + multiplier;
+            if (boardCleared || multiplier > 1) {
+                String praise;
+                if (boardCleared) {
+                    praise = "BOARD CLEAR!";
+                } else {
+                    praise = PRAISE_TEXT.length == 0
+                            ? "Great!"
+                            : PRAISE_TEXT[praiseRandom.nextInt(PRAISE_TEXT.length)];
+                    praise = praise + " x" + multiplier;
+                }
+                praiseText = praise;
                 praiseProgress = 0f;
                 if (praiseAnimator != null) {
                     praiseAnimator.cancel();
@@ -1147,7 +1157,7 @@ public class GameActivity extends Activity {
                     draggingSlot = slot;
                     invalidate();
                     ClipData dragData = ClipData.newPlainText(PIECE_DRAG_LABEL, String.valueOf(slot));
-                    View.DragShadowBuilder shadowBuilder = new PieceDragShadowBuilder(view, engine.getPiece(slot));
+                    View.DragShadowBuilder shadowBuilder = new PieceDragShadowBuilder(view);
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
                         view.startDragAndDrop(dragData, shadowBuilder, slot, 0);
                     } else {
@@ -1250,12 +1260,10 @@ public class GameActivity extends Activity {
     }
 
     private final class PieceDragShadowBuilder extends View.DragShadowBuilder {
-        private final BlockPiece piece;
         private final Bitmap bitmap;
 
-        PieceDragShadowBuilder(View view, BlockPiece piece) {
+        PieceDragShadowBuilder(View view) {
             super(view);
-            this.piece = piece;
             bitmap = Bitmap.createBitmap(
                     Math.max(1, view.getWidth()),
                     Math.max(1, view.getHeight()),
@@ -1269,7 +1277,11 @@ public class GameActivity extends Activity {
             int width = bitmap.getWidth();
             int height = bitmap.getHeight();
             shadowSize.set(width, height);
-            shadowTouchPoint.set(width / 2, Math.max(1, Math.round(height / 2f + dragHoverOffsetPx())));
+            
+            // Fix horizontal alignment: center the touch point exactly
+            int touchX = width / 2;
+            int touchY = Math.max(1, Math.round(height / 2f + dragHoverOffsetPx()));
+            shadowTouchPoint.set(touchX, touchY);
         }
 
         @Override
