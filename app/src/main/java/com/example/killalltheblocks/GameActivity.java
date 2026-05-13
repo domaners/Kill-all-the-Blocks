@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -24,6 +25,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.util.Log;
 import android.view.DragEvent;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
@@ -37,6 +39,17 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import com.google.android.gms.auth.api.signin.GoogleSignIn;
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
+import com.google.android.gms.auth.api.signin.GoogleSignInClient;
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
+import com.google.android.gms.common.api.ApiException;
+import com.google.android.gms.tasks.Task;
+import com.google.firebase.auth.AuthCredential;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.GoogleAuthProvider;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -59,6 +72,7 @@ public class GameActivity extends Activity {
             0.13f, 0.74f, 0.39f, 0.91f, 0.44f, 0.56f, 0.84f, 0.29f, 0.93f, 0.58f,
             0.04f, 0.32f, 0.72f, 0.18f
     };
+    private static final int RC_SIGN_IN = 9001;
 
     private final Handler timerHandler = new Handler(Looper.getMainLooper());
     private final GameEngine engine = new GameEngine();
@@ -73,6 +87,9 @@ public class GameActivity extends Activity {
     private TextView highScoreView;
     private TextView timerView;
     private TextView statusView;
+    private FirebaseAuth firebaseAuth;
+    private GoogleSignInClient googleSignInClient;
+    private FirebaseStore firebaseStore;
     private int draggingSlot = GameEngine.NO_SELECTION;
     private boolean settingsOpenedFromGame;
     private long gameStartedAt;
@@ -96,6 +113,19 @@ public class GameActivity extends Activity {
         gameStateStore = new GameStateStore(this);
         settingsStore = new GameSettingsStore(this);
         toneGenerator = new ToneGenerator(AudioManager.STREAM_MUSIC, 100);
+
+        firebaseAuth = FirebaseAuth.getInstance();
+        firebaseStore = new FirebaseStore();
+        
+        scoreStore.setFirebaseStore(firebaseStore);
+        settingsStore.setFirebaseStore(firebaseStore);
+        
+        // Configure Google Sign In
+        GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestEmail()
+                .build();
+        googleSignInClient = GoogleSignIn.getClient(this, gso);
+
         showTitleScreen();
     }
 
@@ -144,6 +174,20 @@ public class GameActivity extends Activity {
         subtitle.setPadding(0, dp(16), 0, dp(28));
         root.addView(subtitle, fullWrapParams());
 
+        if (firebaseAuth.getCurrentUser() == null) {
+            Button login = menuButton("Login with Google");
+            login.setOnClickListener(v -> startSignIn());
+            root.addView(login, buttonParams());
+        } else {
+            TextView welcome = new TextView(this);
+            welcome.setText("Welcome back " + firebaseAuth.getCurrentUser().getDisplayName());
+            welcome.setTextColor(Color.argb(190, 255, 255, 255));
+            welcome.setTextSize(12);
+            welcome.setGravity(Gravity.CENTER);
+            welcome.setPadding(0, dp(18), 0, 0);
+            root.addView(welcome, fullWrapParams());
+        }
+
         Button start = menuButton("Start New Game");
         start.setOnClickListener(v -> startNewGame());
         root.addView(start, buttonParams());
@@ -185,7 +229,45 @@ public class GameActivity extends Activity {
         LinearLayout scores = new LinearLayout(this);
         scores.setOrientation(LinearLayout.VERTICAL);
         scores.setPadding(0, dp(18), 0, dp(18));
-        addScoreRows(scores, true);
+        
+        if (firebaseAuth.getCurrentUser() != null) {
+            TextView globalLabel = leaderText("Global Top 10", true);
+            globalLabel.setGravity(Gravity.CENTER);
+            globalLabel.setTextColor(Color.YELLOW);
+            scores.addView(globalLabel);
+            
+            TextView loadingLabel = leaderText("Loading global scores...", true);
+            scores.addView(loadingLabel);
+            
+            firebaseStore.fetchGlobalScores(globalScores -> {
+                scores.removeView(loadingLabel);
+                if (!globalScores.isEmpty()) {
+                    for (int i = 0; i < globalScores.size(); i++) {
+                        ScoreEntry entry = globalScores.get(i);
+                        String text = String.format(Locale.getDefault(), "%d. %s - %d pts",
+                                i + 1, entry.getPlayerName(), entry.getScore());
+                        scores.addView(leaderText(text, true));
+                    }
+                } else {
+                    scores.addView(leaderText("No global scores yet.", true));
+                }
+                
+                View divider = new View(this);
+                divider.setBackgroundColor(Color.WHITE);
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1));
+                lp.setMargins(0, dp(16), 0, dp(16));
+                scores.addView(divider, lp);
+                
+                TextView localLabel = leaderText("Your Local Top Scores", true);
+                localLabel.setGravity(Gravity.CENTER);
+                localLabel.setTextColor(Color.CYAN);
+                scores.addView(localLabel);
+                addScoreRows(scores, true);
+            });
+        } else {
+            addScoreRows(scores, true);
+        }
+
         scrollView.addView(scores);
         root.addView(scrollView, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
@@ -285,6 +367,17 @@ public class GameActivity extends Activity {
             }
         });
         root.addView(back, buttonParams());
+
+        if (firebaseAuth.getCurrentUser() != null) {
+            Button logout = menuButton("Logout");
+            logout.setOnClickListener(v -> {
+                firebaseAuth.signOut();
+                googleSignInClient.signOut();
+                showTitleScreen();
+            });
+            root.addView(logout, buttonParams());
+        }
+
         setContentView(root);
     }
 
@@ -713,6 +806,40 @@ public class GameActivity extends Activity {
         for (PieceView pieceView : pieceViews) {
             pieceView.invalidate();
         }
+    }
+
+    private void startSignIn() {
+        Intent signInIntent = googleSignInClient.getSignInIntent();
+        startActivityForResult(signInIntent, RC_SIGN_IN);
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == RC_SIGN_IN) {
+            Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(data);
+            try {
+                GoogleSignInAccount account = task.getResult(ApiException.class);
+                firebaseAuthWithGoogle(account);
+            } catch (ApiException e) {
+                Log.w("GameActivity", "Google sign in failed", e);
+                Toast.makeText(this, "Login failed", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
+    private void firebaseAuthWithGoogle(GoogleSignInAccount acct) {
+        AuthCredential credential = GoogleAuthProvider.getCredential(acct.getIdToken(), null);
+        firebaseAuth.signInWithCredential(credential)
+                .addOnCompleteListener(this, task -> {
+                    if (task.isSuccessful()) {
+                        firebaseStore.syncOnLogin(scoreStore, settingsStore);
+                        showTitleScreen();
+                    } else {
+                        Toast.makeText(this, "Firebase Auth failed", Toast.LENGTH_SHORT).show();
+                    }
+                });
     }
 
     private final class PatternLayout extends LinearLayout {

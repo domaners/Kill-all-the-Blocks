@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "202537848705",
+    "project_id": "kill-all-the-blocks",
+    "storage_bucket": "kill-all-the-blocks.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:202537848705:android:6d0384c3291d4b9b2ae280",
+        "android_client_info": {
+          "package_name": "com.example.killalltheblocks"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "202537848705-fd9keki45i1q3fjaau6gtmga2lfaa9p4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAE0QPo8Qcyvyk7cCrJfYiDWRwZD2yZUM0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "202537848705-fd9keki45i1q3fjaau6gtmga2lfaa9p4.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

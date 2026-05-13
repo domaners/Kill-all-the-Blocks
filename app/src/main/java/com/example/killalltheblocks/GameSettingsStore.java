@@ -12,9 +12,20 @@ final class GameSettingsStore {
     private static final String DEFAULT_PLAYER_NAME = "Player 1";
 
     private final SharedPreferences preferences;
+    private FirebaseStore firebaseStore;
 
     GameSettingsStore(Context context) {
         preferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+    }
+
+    void setFirebaseStore(FirebaseStore firebaseStore) {
+        this.firebaseStore = firebaseStore;
+    }
+
+    private void syncToFirebase() {
+        if (firebaseStore != null) {
+            firebaseStore.saveSettings(getVolumePercent(), isHapticsEnabled(), getPlayerName());
+        }
     }
 
     int getVolumePercent() {
@@ -23,6 +34,7 @@ final class GameSettingsStore {
 
     void setVolumePercent(int volume) {
         preferences.edit().putInt(KEY_VOLUME, Math.max(0, Math.min(100, volume))).apply();
+        syncToFirebase();
     }
 
     boolean isHapticsEnabled() {
@@ -31,6 +43,7 @@ final class GameSettingsStore {
 
     void setHapticsEnabled(boolean enabled) {
         preferences.edit().putBoolean(KEY_HAPTICS, enabled).apply();
+        syncToFirebase();
     }
 
     String getPlayerName() {
@@ -47,5 +60,6 @@ final class GameSettingsStore {
             value = DEFAULT_PLAYER_NAME;
         }
         preferences.edit().putString(KEY_PLAYER_NAME, value).apply();
+        syncToFirebase();
     }
 }

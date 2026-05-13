@@ -1,5 +1,6 @@
 plugins {
     id 'com.android.application'
+    id 'com.google.gms.google-services'
 }
 
 android {
@@ -10,11 +11,17 @@ android {
         applicationId 'com.example.killalltheblocks'
         minSdk 23
         targetSdk 35
-        versionCode 6
-        versionName '1.5'
+        versionCode 8
+        versionName '1.6'
     }
 }
 
 dependencies {
+    implementation platform('com.google.firebase:firebase-bom:34.13.0')
+    implementation 'com.google.firebase:firebase-auth'
+    implementation 'com.google.firebase:firebase-database'
+    implementation 'com.google.android.gms:play-services-auth:21.5.1'
+    implementation("com.google.firebase:firebase-analytics")
+
     testImplementation 'junit:junit:4.13.2'
 }
