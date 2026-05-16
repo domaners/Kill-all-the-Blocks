@@ -52,6 +52,90 @@ public class FirebaseStore {
         database.child(NODES_USERS).child(user.getUid()).child(NODES_SCORES).child(key).setValue(true);
     }
 
+    /**
+     * Submits a score to Firebase. It only posts to the global leaderboard if it's a new personal best.
+     * It then checks if the score is in the global top 10.
+     */
+    public void submitScore(final ScoreEntry entry, final OnScoreSubmittedListener listener) {
+        final FirebaseUser user = auth.getCurrentUser();
+        if (user == null) {
+            if (listener != null) listener.onResult(false, -1);
+            return;
+        }
+
+        final DatabaseReference userRef = database.child(NODES_USERS).child(user.getUid());
+        userRef.child("personalBest").addListenerForSingleValueEvent(new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot snapshot) {
+                long currentBest = 0;
+                boolean exists = snapshot.exists();
+                if (exists) {
+                    Long val = snapshot.getValue(Long.class);
+                    if (val != null) currentBest = val;
+                }
+
+                if (entry.getScore() > currentBest || !exists) {
+                    // New Personal Best
+                    userRef.child("personalBest").setValue(entry.getScore());
+                    pushScore(entry);
+                    
+                    // Check global rank
+                    checkGlobalRank(entry.getScore(), listener);
+                } else {
+                    if (listener != null) listener.onResult(false, -1);
+                }
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError error) {
+                if (listener != null) listener.onResult(false, -1);
+            }
+        });
+    }
+
+    private void checkGlobalRank(final int score, final OnScoreSubmittedListener listener) {
+        database.child(NODES_SCORES).orderByChild("score").limitToLast(10).addListenerForSingleValueEvent(new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot snapshot) {
+                List<Integer> topScores = new ArrayList<>();
+                for (DataSnapshot postSnapshot : snapshot.getChildren()) {
+                    try {
+                        Map<?, ?> data = (Map<?, ?>) postSnapshot.getValue();
+                        if (data != null) {
+                            Object s = data.get("score");
+                            if (s instanceof Long) {
+                                topScores.add(((Long) s).intValue());
+                            }
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error parsing rank entry", e);
+                    }
+                }
+                // Sort descending
+                java.util.Collections.sort(topScores, java.util.Collections.reverseOrder());
+                
+                int rank = -1;
+                for (int i = 0; i < topScores.size(); i++) {
+                    if (score >= topScores.get(i)) {
+                        rank = i + 1;
+                        break;
+                    }
+                }
+                
+                if (rank == -1 && topScores.size() < 10) {
+                    rank = topScores.size() + 1;
+                }
+                
+                if (listener != null) listener.onResult(true, rank);
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError error) {
+                if (listener != null) listener.onResult(true, -1);
+            }
+        });
+    }
+
     public void saveSettings(int volume, boolean haptics, String playerName) {
         FirebaseUser user = auth.getCurrentUser();
         if (user == null) return;
@@ -71,14 +155,25 @@ public class FirebaseStore {
             public void onDataChange(@NonNull DataSnapshot snapshot) {
                 List<ScoreEntry> scores = new ArrayList<>();
                 for (DataSnapshot postSnapshot : snapshot.getChildren()) {
-                    Map<String, Object> data = (Map<String, Object>) postSnapshot.getValue();
-                    if (data != null) {
-                        scores.add(new ScoreEntry(
-                                ((Long) data.get("score")).intValue(),
-                                (Long) data.get("finishedAtMillis"),
-                                (Long) data.get("durationMillis"),
-                                (String) data.get("playerName")
-                        ));
+                    try {
+                        Map<?, ?> data = (Map<?, ?>) postSnapshot.getValue();
+                        if (data != null) {
+                            Long score = (Long) data.get("score");
+                            Long finishedAt = (Long) data.get("finishedAtMillis");
+                            Long duration = (Long) data.get("durationMillis");
+                            String name = (String) data.get("playerName");
+                            
+                            if (score != null && finishedAt != null && duration != null) {
+                                scores.add(new ScoreEntry(
+                                        score.intValue(),
+                                        finishedAt,
+                                        duration,
+                                        name != null ? name : "Unknown"
+                                ));
+                            }
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error parsing score entry", e);
                     }
                 }
                 // Reverse because limitToLast gives ascending order
@@ -116,5 +211,9 @@ public class FirebaseStore {
 
     public interface OnScoresFetchedListener {
         void onFetched(List<ScoreEntry> scores);
+    }
+
+    public interface OnScoreSubmittedListener {
+        void onResult(boolean isPersonalBest, int globalRank);
     }
 }

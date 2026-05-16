@@ -125,6 +125,10 @@ final class BlockPiece {
         pieces.add(new BlockPiece("L 3x3 Flip Horizontal", new int[][]{{0, 2}, {1, 2}, {2, 0}, {2, 1}, {2, 2}}, 0xffaa00ff));
         pieces.add(new BlockPiece("L 3x3 Flip Vertical", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 0}, {2, 0}}, 0xff00e5ff));
         pieces.add(new BlockPiece("L 3x3 Flip Both", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 2}, {2, 2}}, 0xff00e676));
+        pieces.add(new BlockPiece("T Down", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 1}}, 0xff2979ff));
+        pieces.add(new BlockPiece("T Up", new int[][]{{1, 0}, {1, 1}, {1, 2}, {0, 1}}, 0xff2979ff));
+        pieces.add(new BlockPiece("T Right", new int[][]{{0, 0}, {1, 0}, {2, 0}, {1, 1}}, 0xff2979ff));
+        pieces.add(new BlockPiece("T Left", new int[][]{{0, 1}, {1, 1}, {2, 1}, {1, 0}}, 0xff2979ff));
         pieces.add(new BlockPiece("Z", new int[][]{{0, 0}, {0, 1}, {1, 1}, {1, 2}}, 0xff00b8d4));
         pieces.add(new BlockPiece("S", new int[][]{{0, 1}, {0, 2}, {1, 0}, {1, 1}}, 0xff76ff03));
         return Collections.unmodifiableList(pieces);

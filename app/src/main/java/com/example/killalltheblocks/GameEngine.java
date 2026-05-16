@@ -586,10 +586,10 @@ public class GameEngine {
             // Type-Specific Weight Adjustments
             String name = p.getName();
             if (name.contains("Diagonal")) {
-                // Lower the likelihood of diagonal pieces as requested (70% reduction)
-                weight *= 0.3;
-            } else if (name.startsWith("Square") || name.startsWith("Rectangle")) {
-                // Higher likelihood for squares and rectangular pieces (50% boost)
+                // Lower the likelihood of diagonal pieces as requested (80% reduction)
+                weight *= 0.2;
+            } else if (name.startsWith("Square") || name.startsWith("Rectangle") || name.startsWith("T ")) {
+                // Higher likelihood for squares, rectangular, and T pieces (50% boost)
                 weight *= 1.5;
             }
 

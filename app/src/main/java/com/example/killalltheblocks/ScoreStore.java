@@ -18,14 +18,9 @@ public class ScoreStore {
     private static final int MAX_SCORES = 10;
 
     private final SharedPreferences preferences;
-    private FirebaseStore firebaseStore;
 
     public ScoreStore(Context context) {
         preferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-    }
-
-    public void setFirebaseStore(FirebaseStore firebaseStore) {
-        this.firebaseStore = firebaseStore;
     }
 
     public List<ScoreEntry> loadTopScores() {
@@ -63,11 +58,6 @@ public class ScoreStore {
             scores.remove(scores.size() - 1);
         }
         saveScores(scores);
-        
-        if (firebaseStore != null) {
-            firebaseStore.pushScore(entry);
-        }
-
         return scores;
     }
 
