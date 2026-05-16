@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "202537848705",
+    "firebase_url": "https://kill-all-the-blocks-default-rtdb.firebaseio.com",
     "project_id": "kill-all-the-blocks",
     "storage_bucket": "kill-all-the-blocks.firebasestorage.app"
   },
