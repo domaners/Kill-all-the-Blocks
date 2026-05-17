@@ -23,6 +23,7 @@ public class FirebaseStore {
     private static final String NODES_SCORES = "scores";
     private static final String NODES_USERS = "users";
     private static final String NODES_SETTINGS = "settings";
+    private static final String NODES_LEADERBOARD = "leaderboard";
 
     private final DatabaseReference database;
     private final FirebaseAuth auth;
@@ -39,17 +40,22 @@ public class FirebaseStore {
         String key = database.child(NODES_SCORES).push().getKey();
         if (key == null) return;
 
+        Map<String, Object> scoreData = buildScoreMap(entry, user.getUid());
+
+        database.child(NODES_SCORES).child(key).setValue(scoreData);
+        
+        // Also save to user's personal scores list
+        database.child(NODES_USERS).child(user.getUid()).child(NODES_SCORES).child(key).setValue(true);
+    }
+
+    private Map<String, Object> buildScoreMap(ScoreEntry entry, String uid) {
         Map<String, Object> scoreData = new HashMap<>();
         scoreData.put("score", entry.getScore());
         scoreData.put("playerName", entry.getPlayerName());
         scoreData.put("finishedAtMillis", entry.getFinishedAtMillis());
         scoreData.put("durationMillis", entry.getDurationMillis());
-        scoreData.put("uid", user.getUid());
-
-        database.child(NODES_SCORES).child(key).setValue(scoreData);
-        
-        // Also save to user's personal scores
-        database.child(NODES_USERS).child(user.getUid()).child(NODES_SCORES).child(key).setValue(true);
+        scoreData.put("uid", uid);
+        return scoreData;
     }
 
     /**
@@ -77,11 +83,17 @@ public class FirebaseStore {
                 if (entry.getScore() > currentBest || !exists) {
                     // New Personal Best
                     userRef.child("personalBest").setValue(entry.getScore());
+                    
+                    // Update global leaderboard with this player's highest score
+                    database.child(NODES_LEADERBOARD).child(user.getUid()).setValue(buildScoreMap(entry, user.getUid()));
+                    
                     pushScore(entry);
                     
                     // Check global rank
                     checkGlobalRank(entry.getScore(), listener);
                 } else {
+                    // Not a personal best, but we still log the score in their history
+                    pushScore(entry);
                     if (listener != null) listener.onResult(false, -1);
                 }
             }
@@ -94,7 +106,7 @@ public class FirebaseStore {
     }
 
     private void checkGlobalRank(final int score, final OnScoreSubmittedListener listener) {
-        database.child(NODES_SCORES).orderByChild("score").limitToLast(10).addListenerForSingleValueEvent(new ValueEventListener() {
+        database.child(NODES_LEADERBOARD).orderByChild("score").limitToLast(10).addListenerForSingleValueEvent(new ValueEventListener() {
             @Override
             public void onDataChange(@NonNull DataSnapshot snapshot) {
                 List<Integer> topScores = new ArrayList<>();
@@ -136,12 +148,13 @@ public class FirebaseStore {
         });
     }
 
-    public void saveSettings(int volume, boolean haptics, String playerName) {
+    public void saveSettings(int fxVolume, int musicVolume, boolean haptics, String playerName) {
         FirebaseUser user = auth.getCurrentUser();
         if (user == null) return;
 
         Map<String, Object> settings = new HashMap<>();
-        settings.put("volume", volume);
+        settings.put("fxVolume", fxVolume);
+        settings.put("musicVolume", musicVolume);
         settings.put("haptics", haptics);
         settings.put("playerName", playerName);
 
@@ -149,35 +162,11 @@ public class FirebaseStore {
     }
 
     public void fetchGlobalScores(final OnScoresFetchedListener listener) {
-        Query topScoresQuery = database.child(NODES_SCORES).orderByChild("score").limitToLast(10);
+        Query topScoresQuery = database.child(NODES_LEADERBOARD).orderByChild("score").limitToLast(10);
         topScoresQuery.addListenerForSingleValueEvent(new ValueEventListener() {
             @Override
             public void onDataChange(@NonNull DataSnapshot snapshot) {
-                List<ScoreEntry> scores = new ArrayList<>();
-                for (DataSnapshot postSnapshot : snapshot.getChildren()) {
-                    try {
-                        Map<?, ?> data = (Map<?, ?>) postSnapshot.getValue();
-                        if (data != null) {
-                            Long score = (Long) data.get("score");
-                            Long finishedAt = (Long) data.get("finishedAtMillis");
-                            Long duration = (Long) data.get("durationMillis");
-                            String name = (String) data.get("playerName");
-                            
-                            if (score != null && finishedAt != null && duration != null) {
-                                scores.add(new ScoreEntry(
-                                        score.intValue(),
-                                        finishedAt,
-                                        duration,
-                                        name != null ? name : "Unknown"
-                                ));
-                            }
-                        }
-                    } catch (Exception e) {
-                        Log.e(TAG, "Error parsing score entry", e);
-                    }
-                }
-                // Reverse because limitToLast gives ascending order
-                java.util.Collections.reverse(scores);
+                List<ScoreEntry> scores = parseScores(snapshot);
                 listener.onFetched(scores);
             }
 
@@ -186,6 +175,67 @@ public class FirebaseStore {
                 Log.e(TAG, "Failed to fetch scores", error.toException());
             }
         });
+    }
+
+    public void fetchUserScores(final OnScoresFetchedListener listener) {
+        FirebaseUser user = auth.getCurrentUser();
+        if (user == null) {
+            listener.onFetched(new ArrayList<>());
+            return;
+        }
+
+        Query userScoresQuery = database.child(NODES_SCORES)
+                .orderByChild("uid")
+                .equalTo(user.getUid());
+
+        userScoresQuery.addListenerForSingleValueEvent(new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot snapshot) {
+                List<ScoreEntry> scores = parseScores(snapshot);
+                // Sort manually because Firebase can only order by one field without complex indices
+                java.util.Collections.sort(scores, (a, b) -> Integer.compare(b.getScore(), a.getScore()));
+                if (scores.size() > 10) {
+                    scores = scores.subList(0, 10);
+                }
+                listener.onFetched(scores);
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError error) {
+                Log.e(TAG, "Failed to fetch user scores", error.toException());
+            }
+        });
+    }
+
+    private List<ScoreEntry> parseScores(DataSnapshot snapshot) {
+        List<ScoreEntry> scores = new ArrayList<>();
+        for (DataSnapshot postSnapshot : snapshot.getChildren()) {
+            try {
+                Map<?, ?> data = (Map<?, ?>) postSnapshot.getValue();
+                if (data != null) {
+                    Long score = (Long) data.get("score");
+                    Long finishedAt = (Long) data.get("finishedAtMillis");
+                    Long duration = (Long) data.get("durationMillis");
+                    String name = (String) data.get("playerName");
+                    String uid = (String) data.get("uid");
+
+                    if (score != null && finishedAt != null && duration != null) {
+                        scores.add(new ScoreEntry(
+                                score.intValue(),
+                                finishedAt,
+                                duration,
+                                name != null ? name : "Unknown",
+                                uid
+                        ));
+                    }
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error parsing score entry", e);
+            }
+        }
+        // Reverse because limitToLast/Firebase order is usually ascending
+        java.util.Collections.reverse(scores);
+        return scores;
     }
 
     public void syncOnLogin(ScoreStore localScoreStore, GameSettingsStore localSettingsStore) {
@@ -200,7 +250,8 @@ public class FirebaseStore {
 
         // 2. Push local settings to Firebase
         saveSettings(
-                localSettingsStore.getVolumePercent(),
+                localSettingsStore.getFxVolumePercent(),
+                localSettingsStore.getMusicVolumePercent(),
                 localSettingsStore.isHapticsEnabled(),
                 localSettingsStore.getPlayerName()
         );

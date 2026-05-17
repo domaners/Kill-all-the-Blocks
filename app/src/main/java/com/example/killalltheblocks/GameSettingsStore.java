@@ -5,11 +5,18 @@ import android.content.SharedPreferences;
 
 final class GameSettingsStore {
     private static final String PREFS_NAME = "settings";
-    private static final String KEY_VOLUME = "volume";
+    private static final String KEY_FX_VOLUME = "fx_volume";
+    private static final String KEY_MUSIC_VOLUME = "music_volume";
     private static final String KEY_HAPTICS = "haptics";
     private static final String KEY_PLAYER_NAME = "player_name";
+    private static final String KEY_GAMEPLAY_MUSIC = "gameplay_music";
     private static final int DEFAULT_VOLUME = 70;
     private static final String DEFAULT_PLAYER_NAME = "Player 1";
+    public static final String MUSIC_RANDOM = "Random";
+    public static final String MUSIC_CLEAR_BLUE = "Clear Blue Ascent";
+    public static final String MUSIC_CLOCKWORK = "Clockwork Bloom";
+    public static final String MUSIC_LOGIC = "Logic of the Lock";
+    public static final String MUSIC_IRON = "The Iron Pivot";
 
     private final SharedPreferences preferences;
     private FirebaseStore firebaseStore;
@@ -24,16 +31,31 @@ final class GameSettingsStore {
 
     private void syncToFirebase() {
         if (firebaseStore != null) {
-            firebaseStore.saveSettings(getVolumePercent(), isHapticsEnabled(), getPlayerName());
+            firebaseStore.saveSettings(getFxVolumePercent(), getMusicVolumePercent(), isHapticsEnabled(), getPlayerName());
         }
     }
 
-    int getVolumePercent() {
-        return preferences.getInt(KEY_VOLUME, DEFAULT_VOLUME);
+    int getFxVolumePercent() {
+        // Fallback to old "volume" key if "fx_volume" doesn't exist yet
+        if (!preferences.contains(KEY_FX_VOLUME) && preferences.contains("volume")) {
+            int oldVal = preferences.getInt("volume", DEFAULT_VOLUME);
+            setFxVolumePercent(oldVal);
+            return oldVal;
+        }
+        return preferences.getInt(KEY_FX_VOLUME, DEFAULT_VOLUME);
     }
 
-    void setVolumePercent(int volume) {
-        preferences.edit().putInt(KEY_VOLUME, Math.max(0, Math.min(100, volume))).apply();
+    void setFxVolumePercent(int volume) {
+        preferences.edit().putInt(KEY_FX_VOLUME, Math.max(0, Math.min(100, volume))).apply();
+        syncToFirebase();
+    }
+
+    int getMusicVolumePercent() {
+        return preferences.getInt(KEY_MUSIC_VOLUME, DEFAULT_VOLUME);
+    }
+
+    void setMusicVolumePercent(int volume) {
+        preferences.edit().putInt(KEY_MUSIC_VOLUME, Math.max(0, Math.min(100, volume))).apply();
         syncToFirebase();
     }
 
@@ -61,5 +83,13 @@ final class GameSettingsStore {
         }
         preferences.edit().putString(KEY_PLAYER_NAME, value).apply();
         syncToFirebase();
+    }
+
+    String getGameplayMusic() {
+        return preferences.getString(KEY_GAMEPLAY_MUSIC, MUSIC_RANDOM);
+    }
+
+    void setGameplayMusic(String music) {
+        preferences.edit().putString(KEY_GAMEPLAY_MUSIC, music).apply();
     }
 }

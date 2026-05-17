@@ -39,8 +39,11 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.ArrayAdapter;
+import android.widget.AdapterView;
 
 import androidx.annotation.NonNull;
 
@@ -96,7 +99,10 @@ public class GameActivity extends Activity {
     private GoogleSignInClient googleSignInClient;
     private FirebaseStore firebaseStore;
     private MediaPlayer titleMusic;
+    private MediaPlayer gameplayMusic;
+    private MediaPlayer highScoreMusic;
     private int draggingSlot = GameEngine.NO_SELECTION;
+    private boolean showingGlobalScores = true;
     private boolean settingsOpenedFromGame;
     private long gameStartedAt;
     private long activeElapsedMillis;
@@ -141,6 +147,8 @@ public class GameActivity extends Activity {
         timerHandler.removeCallbacks(timerRunnable);
         saveCurrentGame();
         stopMusic();
+        stopGameplayMusic();
+        stopHighScoreMusic();
         if (toneGenerator != null) {
             toneGenerator.release();
         }
@@ -154,6 +162,12 @@ public class GameActivity extends Activity {
         if (titleMusic != null && titleMusic.isPlaying()) {
             titleMusic.pause();
         }
+        if (gameplayMusic != null && gameplayMusic.isPlaying()) {
+            gameplayMusic.pause();
+        }
+        if (highScoreMusic != null && highScoreMusic.isPlaying()) {
+            highScoreMusic.pause();
+        }
         super.onPause();
     }
 
@@ -162,6 +176,12 @@ public class GameActivity extends Activity {
         super.onResume();
         if (titleMusic != null && !titleMusic.isPlaying() && boardView == null) {
             titleMusic.start();
+        }
+        if (gameplayMusic != null && !gameplayMusic.isPlaying() && boardView != null) {
+            gameplayMusic.start();
+        }
+        if (highScoreMusic != null && !highScoreMusic.isPlaying()) {
+            highScoreMusic.start();
         }
         if (boardView != null && !gameEnded) {
             resumeGameClock();
@@ -173,6 +193,8 @@ public class GameActivity extends Activity {
     private void showTitleScreen() {
         timerHandler.removeCallbacks(timerRunnable);
         boardView = null;
+        stopGameplayMusic();
+        stopHighScoreMusic();
         startMusic();
         PatternLayout root = baseRoot();
         root.setGravity(Gravity.CENTER);
@@ -234,56 +256,71 @@ public class GameActivity extends Activity {
 
     private void showHighScoresScreen() {
         timerHandler.removeCallbacks(timerRunnable);
+        stopGameplayMusic();
+        stopHighScoreMusic();
         PatternLayout root = baseRoot();
 
         TextView heading = screenHeading("High Scores");
         root.addView(heading, fullWrapParams());
 
-        ScrollView scrollView = new ScrollView(this);
-        LinearLayout scores = new LinearLayout(this);
-        scores.setOrientation(LinearLayout.VERTICAL);
-        scores.setPadding(0, dp(18), 0, dp(18));
-        
+        LinearLayout scoresContainer = new LinearLayout(this);
+        scoresContainer.setOrientation(LinearLayout.VERTICAL);
+        scoresContainer.setPadding(0, dp(10), 0, dp(10));
+
         if (firebaseAuth.getCurrentUser() != null) {
-            TextView globalLabel = leaderText("Global Top 10", true);
-            globalLabel.setGravity(Gravity.CENTER);
-            globalLabel.setTextColor(Color.YELLOW);
-            scores.addView(globalLabel);
-            
-            TextView loadingLabel = leaderText("Loading global scores...", true);
-            scores.addView(loadingLabel);
-            
-            firebaseStore.fetchGlobalScores(globalScores -> {
-                scores.removeView(loadingLabel);
-                if (!globalScores.isEmpty()) {
-                    for (int i = 0; i < globalScores.size(); i++) {
-                        ScoreEntry entry = globalScores.get(i);
-                        String text = String.format(Locale.getDefault(), "%d. %s - %d pts",
-                                i + 1, entry.getPlayerName(), entry.getScore());
-                        scores.addView(leaderText(text, true));
-                    }
-                } else {
-                    scores.addView(leaderText("No global scores yet.", true));
-                }
-                
-                View divider = new View(this);
-                divider.setBackgroundColor(Color.WHITE);
-                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1));
-                lp.setMargins(0, dp(16), 0, dp(16));
-                scores.addView(divider, lp);
-                
-                TextView localLabel = leaderText("Your Local Top Scores", true);
-                localLabel.setGravity(Gravity.CENTER);
-                localLabel.setTextColor(Color.CYAN);
-                scores.addView(localLabel);
-                addScoreRows(scores, true);
+            Button toggle = menuButton(showingGlobalScores ? "Switch to My Scores" : "Switch to All Users");
+            toggle.setOnClickListener(v -> {
+                showingGlobalScores = !showingGlobalScores;
+                showHighScoresScreen();
             });
-        } else {
-            addScoreRows(scores, true);
+            scoresContainer.addView(toggle, buttonParams());
         }
 
-        scrollView.addView(scores);
-        root.addView(scrollView, new LinearLayout.LayoutParams(
+        ScrollView scrollView = new ScrollView(this);
+        LinearLayout scoresList = new LinearLayout(this);
+        scoresList.setOrientation(LinearLayout.VERTICAL);
+        scoresList.setPadding(0, dp(18), 0, dp(18));
+        
+        TextView loadingLabel = leaderText("Loading scores...", true);
+        scoresList.addView(loadingLabel);
+
+        FirebaseStore.OnScoresFetchedListener scoreListener = scores -> {
+            scoresList.removeAllViews();
+            if (!scores.isEmpty()) {
+                String currentUid = firebaseAuth.getCurrentUser() != null ? firebaseAuth.getCurrentUser().getUid() : null;
+                for (int i = 0; i < scores.size(); i++) {
+                    ScoreEntry entry = scores.get(i);
+                    String text = String.format(Locale.getDefault(), "%d. %s - %d pts",
+                            i + 1, entry.getPlayerName(), entry.getScore());
+                    TextView row = leaderText(text, true);
+                    if (currentUid != null && currentUid.equals(entry.getUid())) {
+                        row.setTextColor(Color.YELLOW);
+                        row.setTypeface(Typeface.DEFAULT_BOLD);
+                    }
+                    scoresList.addView(row);
+                }
+            } else {
+                scoresList.addView(leaderText("No scores to display.", true));
+            }
+        };
+
+        if (firebaseAuth.getCurrentUser() != null) {
+            if (showingGlobalScores) {
+                firebaseStore.fetchGlobalScores(scoreListener);
+            } else {
+                firebaseStore.fetchUserScores(scoreListener);
+            }
+        } else {
+            // Local fallback if not logged in
+            scoresList.removeAllViews();
+            addScoreRows(scoresList, true);
+        }
+
+        scrollView.addView(scoresList);
+        scoresContainer.addView(scrollView, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        
+        root.addView(scoresContainer, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         Button back = menuButton("Back");
@@ -298,6 +335,7 @@ public class GameActivity extends Activity {
         if (fromGame) {
             pauseGameClock();
             saveCurrentGame();
+            stopGameplayMusic();
         }
         PatternLayout root = baseRoot();
 
@@ -319,18 +357,17 @@ public class GameActivity extends Activity {
         });
         root.addView(playerName, fullWrapParams());
 
-        TextView volumeLabel = settingLabel("Volume: " + settingsStore.getVolumePercent() + "%");
-        root.addView(volumeLabel, fullWrapParams());
-        SeekBar volume = new SeekBar(this);
-        volume.setMax(100);
-        volume.setProgress(settingsStore.getVolumePercent());
-        volume.setPadding(0, dp(8), 0, dp(18));
-        volume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+        TextView fxVolumeLabel = settingLabel("FX Volume: " + settingsStore.getFxVolumePercent() + "%");
+        root.addView(fxVolumeLabel, fullWrapParams());
+        SeekBar fxVolume = new SeekBar(this);
+        fxVolume.setMax(100);
+        fxVolume.setProgress(settingsStore.getFxVolumePercent());
+        fxVolume.setPadding(0, dp(8), 0, dp(18));
+        fxVolume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                settingsStore.setVolumePercent(progress);
-                volumeLabel.setText("Volume: " + progress + "%");
-                updateMusicVolume();
+                settingsStore.setFxVolumePercent(progress);
+                fxVolumeLabel.setText("FX Volume: " + progress + "%");
             }
 
             @Override
@@ -342,7 +379,31 @@ public class GameActivity extends Activity {
                 playTone(ToneGenerator.TONE_PROP_BEEP);
             }
         });
-        root.addView(volume, fullWrapParams());
+        root.addView(fxVolume, fullWrapParams());
+
+        TextView musicVolumeLabel = settingLabel("Music Volume: " + settingsStore.getMusicVolumePercent() + "%");
+        root.addView(musicVolumeLabel, fullWrapParams());
+        SeekBar musicVolume = new SeekBar(this);
+        musicVolume.setMax(100);
+        musicVolume.setProgress(settingsStore.getMusicVolumePercent());
+        musicVolume.setPadding(0, dp(8), 0, dp(18));
+        musicVolume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                settingsStore.setMusicVolumePercent(progress);
+                musicVolumeLabel.setText("Music Volume: " + progress + "%");
+                updateMusicVolume();
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+            }
+        });
+        root.addView(musicVolume, fullWrapParams());
 
         CheckBox haptics = new CheckBox(this);
         haptics.setText("Haptics");
@@ -356,6 +417,40 @@ public class GameActivity extends Activity {
             }
         });
         root.addView(haptics, fullWrapParams());
+
+        TextView musicLabel = settingLabel("Gameplay Music");
+        root.addView(musicLabel, fullWrapParams());
+        Spinner musicSpinner = new Spinner(this);
+        String[] musicOptions = {
+                GameSettingsStore.MUSIC_RANDOM,
+                GameSettingsStore.MUSIC_CLEAR_BLUE,
+                GameSettingsStore.MUSIC_CLOCKWORK,
+                GameSettingsStore.MUSIC_LOGIC,
+                GameSettingsStore.MUSIC_IRON
+        };
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, musicOptions);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        musicSpinner.setAdapter(adapter);
+        
+        String currentMusic = settingsStore.getGameplayMusic();
+        for (int i = 0; i < musicOptions.length; i++) {
+            if (musicOptions[i].equals(currentMusic)) {
+                musicSpinner.setSelection(i);
+                break;
+            }
+        }
+        
+        musicSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                settingsStore.setGameplayMusic(musicOptions[position]);
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+        root.addView(musicSpinner, fullWrapParams());
 
         Button clearScores = menuButton("Clear High Scores");
         clearScores.setOnClickListener(v -> new AlertDialog.Builder(this)
@@ -372,6 +467,7 @@ public class GameActivity extends Activity {
             if (settingsOpenedFromGame) {
                 setContentView(createGameView());
                 resumeGameClock();
+                startGameplayMusic();
                 timerHandler.removeCallbacks(timerRunnable);
                 timerHandler.post(timerRunnable);
                 refreshAll(false);
@@ -544,6 +640,7 @@ public class GameActivity extends Activity {
     private void startNewGame() {
         engine.reset();
         stopMusic();
+        startGameplayMusic();
         gameStartedAt = System.currentTimeMillis();
         activeElapsedMillis = 0L;
         gameEnded = false;
@@ -562,8 +659,9 @@ public class GameActivity extends Activity {
             return;
         }
         stopMusic();
+        startGameplayMusic();
         engine.restoreState(savedGame.encodedBoard, savedGame.encodedBoardColors,
-                savedGame.pieceNames, savedGame.score, savedGame.selectedSlot, savedGame.comboStreak, savedGame.boardClearCount);
+                savedGame.pieceNames, savedGame.score, savedGame.selectedSlot, savedGame.comboStreak, savedGame.totalLinesClearedThisTray, savedGame.boardClearCount);
         gameStartedAt = savedGame.startedAtMillis;
         activeElapsedMillis = savedGame.elapsedMillis;
         gameEnded = savedGame.gameEnded;
@@ -654,7 +752,9 @@ public class GameActivity extends Activity {
         if (clearedLines > 0) {
             boolean boardCleared = engine.isBoardEmpty();
             int multiplier = engine.getLastScoreMultiplier();
-            boardView.triggerClearAnimations(multiplier, boardCleared);
+            int combo = engine.getComboStreak();
+            
+            boardView.triggerClearAnimations(multiplier, boardCleared, combo);
             performClearHaptics(multiplier);
             playTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD);
             shakeBoard();
@@ -705,6 +805,7 @@ public class GameActivity extends Activity {
         gameEnded = true;
         pauseGameClock();
         stopMusic();
+        stopGameplayMusic();
         long duration = activeElapsedMillis;
         engine.setFinishedDurationMillis(duration);
         timerHandler.removeCallbacks(timerRunnable);
@@ -723,10 +824,12 @@ public class GameActivity extends Activity {
                 
                 if (isPersonalBest) {
                     message.append("New Personal Best! 🌟\n");
+                    startHighScoreMusic();
                 }
                 
                 if (globalRank > 0 && globalRank <= 10) {
                     message.append("Congratulations! You've reached #").append(globalRank).append(" on the Global Leaderboard! 🏆");
+                    if (!isPersonalBest) startHighScoreMusic();
                 }
                 
                 showGameOverDialog(message.toString());
@@ -741,8 +844,14 @@ public class GameActivity extends Activity {
         new AlertDialog.Builder(this)
                 .setTitle("Game over")
                 .setMessage(message)
-                .setPositiveButton("New Game", (dialog, which) -> startNewGame())
-                .setNegativeButton("Menu", (dialog, which) -> showTitleScreen())
+                .setPositiveButton("New Game", (dialog, which) -> {
+                    stopHighScoreMusic();
+                    startNewGame();
+                })
+                .setNegativeButton("Menu", (dialog, which) -> {
+                    stopHighScoreMusic();
+                    showTitleScreen();
+                })
                 .setCancelable(false)
                 .show();
     }
@@ -823,7 +932,7 @@ public class GameActivity extends Activity {
     }
 
     private void playTone(int toneType) {
-        int volume = settingsStore == null ? 70 : settingsStore.getVolumePercent();
+        int volume = settingsStore == null ? 70 : settingsStore.getFxVolumePercent();
         if (toneGenerator == null || volume <= 0) {
             return;
         }
@@ -847,9 +956,29 @@ public class GameActivity extends Activity {
         }
     }
 
+    private void stopGameplayMusic() {
+        if (gameplayMusic != null) {
+            if (gameplayMusic.isPlaying()) {
+                gameplayMusic.stop();
+            }
+            gameplayMusic.release();
+            gameplayMusic = null;
+        }
+    }
+
+    private void stopHighScoreMusic() {
+        if (highScoreMusic != null) {
+            if (highScoreMusic.isPlaying()) {
+                highScoreMusic.stop();
+            }
+            highScoreMusic.release();
+            highScoreMusic = null;
+        }
+    }
+
     private void startMusic() {
         if (titleMusic == null) {
-            titleMusic = MediaPlayer.create(this, R.raw.afternoon_puzzle_run);
+            titleMusic = MediaPlayer.create(this, R.raw.clear_blue_ascent);
             if (titleMusic != null) {
                 titleMusic.setLooping(true);
                 updateMusicVolume();
@@ -860,10 +989,64 @@ public class GameActivity extends Activity {
         }
     }
 
+    private void startGameplayMusic() {
+        if (gameplayMusic != null) {
+            stopGameplayMusic();
+        }
+        
+        String selected = settingsStore.getGameplayMusic();
+        if (GameSettingsStore.MUSIC_RANDOM.equals(selected)) {
+            String[] options = {
+                    GameSettingsStore.MUSIC_CLEAR_BLUE,
+                    GameSettingsStore.MUSIC_CLOCKWORK,
+                    GameSettingsStore.MUSIC_LOGIC,
+                    GameSettingsStore.MUSIC_IRON
+            };
+            selected = options[new Random().nextInt(options.length)];
+        }
+        
+        int resId = 0;
+        if (GameSettingsStore.MUSIC_CLEAR_BLUE.equals(selected)) {
+            resId = R.raw.clear_blue_ascent;
+        } else if (GameSettingsStore.MUSIC_CLOCKWORK.equals(selected)) {
+            resId = R.raw.clockwork_bloom;
+        } else if (GameSettingsStore.MUSIC_LOGIC.equals(selected)) {
+            resId = R.raw.logic_of_the_lock;
+        } else if (GameSettingsStore.MUSIC_IRON.equals(selected)) {
+            resId = R.raw.the_iron_pivot;
+        }
+        
+        if (resId != 0) {
+            gameplayMusic = MediaPlayer.create(this, resId);
+            if (gameplayMusic != null) {
+                gameplayMusic.setLooping(true);
+                updateMusicVolume();
+                gameplayMusic.start();
+            }
+        }
+    }
+
+    private void startHighScoreMusic() {
+        if (highScoreMusic == null) {
+            highScoreMusic = MediaPlayer.create(this, R.raw.shifting_rooms);
+            if (highScoreMusic != null) {
+                highScoreMusic.setLooping(true);
+                updateMusicVolume();
+                highScoreMusic.start();
+            }
+        }
+    }
+
     private void updateMusicVolume() {
+        float volume = settingsStore.getMusicVolumePercent() / 100f;
         if (titleMusic != null) {
-            float volume = settingsStore.getVolumePercent() / 100f;
             titleMusic.setVolume(volume, volume);
+        }
+        if (gameplayMusic != null) {
+            gameplayMusic.setVolume(volume, volume);
+        }
+        if (highScoreMusic != null) {
+            highScoreMusic.setVolume(volume, volume);
         }
     }
 
@@ -1393,9 +1576,10 @@ public class GameActivity extends Activity {
             invalidate();
         }
 
-        void triggerClearAnimations(int multiplier, boolean boardCleared) {
+        void triggerClearAnimations(int multiplier, boolean boardCleared, int combo) {
             flashingRows = engine.getLastClearedRowsCopy();
             flashingCols = engine.getLastClearedColsCopy();
+            int currentClearedLines = engine.getLastClearedLines();
             if (clearFlashAnimator != null) {
                 clearFlashAnimator.cancel();
             }
@@ -1415,6 +1599,11 @@ public class GameActivity extends Activity {
                     praise = PRAISE_TEXT.length == 0
                             ? "Great!"
                             : PRAISE_TEXT[praiseRandom.nextInt(PRAISE_TEXT.length)];
+                    
+                    if (combo > currentClearedLines) {
+                        praise = "MEGA COMBO!";
+                    }
+
                     praise = praise + " x" + multiplier;
                 }
                 praiseText = praise;

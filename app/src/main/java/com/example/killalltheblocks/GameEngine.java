@@ -17,6 +17,7 @@ public class GameEngine {
     private int selectedSlot = NO_SELECTION;
     private long finishedDurationMillis;
     private int lastClearedLines;
+    private int totalLinesClearedThisTray;
     private int consecutiveLineClearStreak;
     private int lastScoreMultiplier = 1;
     private int boardClearCount;
@@ -87,6 +88,10 @@ public class GameEngine {
         return consecutiveLineClearStreak;
     }
 
+    public int getTotalLinesClearedThisTray() {
+        return totalLinesClearedThisTray;
+    }
+
     public int getBoardClearCount() {
         return boardClearCount;
     }
@@ -145,7 +150,8 @@ public class GameEngine {
         int clearedLines = clearCompletedLines();
         lastClearedLines = clearedLines;
         if (clearedLines > 0) {
-            consecutiveLineClearStreak++;
+            consecutiveLineClearStreak += clearedLines;
+            totalLinesClearedThisTray += clearedLines;
         } else {
             consecutiveLineClearStreak = 0;
         }
@@ -238,6 +244,7 @@ public class GameEngine {
         consecutiveLineClearStreak = 0;
         lastScoreMultiplier = 1;
         boardClearCount = 0;
+        totalLinesClearedThisTray = 0;
         clearLastClearedLines();
         refillTray();
     }
@@ -270,16 +277,16 @@ public class GameEngine {
     }
 
     public void restoreState(String encodedBoard, String encodedColors, String[] pieceNames, int score, int selectedSlot) {
-        restoreState(encodedBoard, encodedColors, pieceNames, score, selectedSlot, 0);
-    }
-
-    public void restoreState(String encodedBoard, String encodedColors, String[] pieceNames, int score,
-            int selectedSlot, int consecutiveLineClearStreak) {
-        restoreState(encodedBoard, encodedColors, pieceNames, score, selectedSlot, consecutiveLineClearStreak, 0);
+        restoreState(encodedBoard, encodedColors, pieceNames, score, selectedSlot, 0, 0);
     }
 
     public void restoreState(String encodedBoard, String encodedColors, String[] pieceNames, int score,
             int selectedSlot, int consecutiveLineClearStreak, int boardClearCount) {
+        restoreState(encodedBoard, encodedColors, pieceNames, score, selectedSlot, consecutiveLineClearStreak, 0, boardClearCount);
+    }
+
+    public void restoreState(String encodedBoard, String encodedColors, String[] pieceNames, int score,
+            int selectedSlot, int consecutiveLineClearStreak, int totalLinesClearedThisTray, int boardClearCount) {
         if (encodedBoard == null || encodedBoard.length() != BOARD_SIZE * BOARD_SIZE
                 || pieceNames == null || pieceNames.length != PIECE_SLOTS) {
             reset();
@@ -301,6 +308,7 @@ public class GameEngine {
                 ? selectedSlot
                 : NO_SELECTION;
         this.consecutiveLineClearStreak = Math.max(0, consecutiveLineClearStreak);
+        this.totalLinesClearedThisTray = Math.max(0, totalLinesClearedThisTray);
         this.boardClearCount = Math.max(0, boardClearCount);
         lastScoreMultiplier = 1;
         finishedDurationMillis = 0L;
@@ -394,6 +402,7 @@ public class GameEngine {
 
     private void refillTray() {
         selectedSlot = NO_SELECTION;
+        totalLinesClearedThisTray = 0;
         List<BlockPiece> pieces = BlockPiece.standardPieces();
         for (int attempt = 0; attempt < 500; attempt++) {
             BlockPiece[] candidate = new BlockPiece[PIECE_SLOTS];
@@ -541,6 +550,31 @@ public class GameEngine {
         }
     }
 
+    private int countCompletableLines(boolean[][] targetBoard) {
+        int lineCount = 0;
+        for (int row = 0; row < BOARD_SIZE; row++) {
+            boolean complete = true;
+            for (int col = 0; col < BOARD_SIZE; col++) {
+                if (!targetBoard[row][col]) {
+                    complete = false;
+                    break;
+                }
+            }
+            if (complete) lineCount++;
+        }
+        for (int col = 0; col < BOARD_SIZE; col++) {
+            boolean complete = true;
+            for (int row = 0; row < BOARD_SIZE; row++) {
+                if (!targetBoard[row][col]) {
+                    complete = false;
+                    break;
+                }
+            }
+            if (complete) lineCount++;
+        }
+        return lineCount;
+    }
+
     // Added make block selection slightly less random
     private BlockPiece getWeightedRandomPiece(List<BlockPiece> pieces) {
         double totalWeight = 0.0;
@@ -600,6 +634,32 @@ public class GameEngine {
         // Standard weighted random selection:
         // 1. Pick a random value between 0 and the sum of all weights.
         // 2. Iterate through weights and subtract/accumulate until that value is reached.
+        
+        // Prioritize pieces that can clear enough lines to lower number of populated tiles
+        for (int i = 0; i < pieces.size(); i++) {
+            BlockPiece p = pieces.get(i);
+            int bestClears = 0;
+            for (int row = 0; row < BOARD_SIZE; row++) {
+                for (int col = 0; col < BOARD_SIZE; col++) {
+                    if (canPlace(p, row, col)) {
+                        boolean[][] tempBoard = copyBoard();
+                        for (BlockPiece.Cell cell : p.getCells()) {
+                            tempBoard[row + cell.row][col + cell.col] = true;
+                        }
+                        int lines = countCompletableLines(tempBoard);
+                        if (lines > bestClears) bestClears = lines;
+                    }
+                }
+            }
+            if (bestClears > 0) {
+                // If piece can clear lines, boost weight based on how many
+                // A clear-capable piece is prioritized if its clear count outweighs its own size
+                double clearBonus = (double) bestClears * 20.0;
+                weights[i] += clearBonus;
+                totalWeight += clearBonus;
+            }
+        }
+
         double r = random.nextDouble() * totalWeight;
         double countWeight = 0.0;
         for (int i = 0; i < pieces.size(); i++) {

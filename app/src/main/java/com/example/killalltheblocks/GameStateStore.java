@@ -22,6 +22,7 @@ final class GameStateStore {
         try {
             state.put("score", engine.getScore());
             state.put("comboStreak", engine.getComboStreak());
+            state.put("totalLinesClearedThisTray", engine.getTotalLinesClearedThisTray());
             state.put("boardClearCount", engine.getBoardClearCount());
             state.put("selectedSlot", engine.getSelectedSlot());
             state.put("startedAtMillis", startedAtMillis);
@@ -64,6 +65,7 @@ final class GameStateStore {
                     pieceNames,
                     state.getInt("score"),
                     state.optInt("comboStreak", 0),
+                    state.optInt("totalLinesClearedThisTray", 0),
                     state.optInt("boardClearCount", 0),
                     state.optInt("selectedSlot", GameEngine.NO_SELECTION),
                     state.optLong("finishedDurationMillis", 0L),
@@ -85,6 +87,7 @@ final class GameStateStore {
         final String[] pieceNames;
         final int score;
         final int comboStreak;
+        final int totalLinesClearedThisTray;
         final int boardClearCount;
         final int selectedSlot;
         final long finishedDurationMillis;
@@ -98,6 +101,7 @@ final class GameStateStore {
                 String[] pieceNames,
                 int score,
                 int comboStreak,
+                int totalLinesClearedThisTray,
                 int boardClearCount,
                 int selectedSlot,
                 long finishedDurationMillis,
@@ -109,6 +113,7 @@ final class GameStateStore {
             this.pieceNames = pieceNames;
             this.score = score;
             this.comboStreak = comboStreak;
+            this.totalLinesClearedThisTray = totalLinesClearedThisTray;
             this.boardClearCount = boardClearCount;
             this.selectedSlot = selectedSlot;
             this.finishedDurationMillis = finishedDurationMillis;
