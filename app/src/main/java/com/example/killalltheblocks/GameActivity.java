@@ -66,6 +66,9 @@ import com.google.firebase.auth.GoogleAuthProvider;
 import com.google.firebase.auth.UserProfileChangeRequest;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -107,6 +110,8 @@ public class GameActivity extends Activity {
     private MediaPlayer titleMusic;
     private MediaPlayer gameplayMusic;
     private MediaPlayer highScoreMusic;
+    private MediaPlayer gameOverMusic;
+    private final List<String> musicShuffleQueue = new ArrayList<>();
     private int draggingSlot = GameEngine.NO_SELECTION;
     private boolean showingGlobalScores = true;
     private boolean settingsOpenedFromGame;
@@ -148,6 +153,7 @@ public class GameActivity extends Activity {
         stopMusic();
         stopGameplayMusic();
         stopHighScoreMusic();
+        stopGameOverMusic();
         if (toneGenerator != null) {
             toneGenerator.release();
         }
@@ -167,6 +173,9 @@ public class GameActivity extends Activity {
         if (highScoreMusic != null && highScoreMusic.isPlaying()) {
             highScoreMusic.pause();
         }
+        if (gameOverMusic != null && gameOverMusic.isPlaying()) {
+            gameOverMusic.pause();
+        }
         super.onPause();
     }
 
@@ -181,6 +190,9 @@ public class GameActivity extends Activity {
         }
         if (highScoreMusic != null && !highScoreMusic.isPlaying()) {
             highScoreMusic.start();
+        }
+        if (gameOverMusic != null && !gameOverMusic.isPlaying()) {
+            gameOverMusic.start();
         }
         if (boardView != null && !gameEnded) {
             resumeGameClock();
@@ -425,7 +437,9 @@ public class GameActivity extends Activity {
                 GameSettingsStore.MUSIC_CLEAR_BLUE,
                 GameSettingsStore.MUSIC_CLOCKWORK,
                 GameSettingsStore.MUSIC_LOGIC,
-                GameSettingsStore.MUSIC_IRON
+                GameSettingsStore.MUSIC_IRON,
+                GameSettingsStore.MUSIC_SEVEN,
+                GameSettingsStore.MUSIC_NOTCH
         };
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, musicOptions);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
@@ -822,7 +836,8 @@ public class GameActivity extends Activity {
         long duration = activeElapsedMillis;
         engine.setFinishedDurationMillis(duration);
         timerHandler.removeCallbacks(timerRunnable);
-        
+
+        int previousHighScore = getHighScore();
         final ScoreEntry entry = new ScoreEntry(engine.getScore(), System.currentTimeMillis(), duration, settingsStore.getPlayerName());
         scoreStore.addScore(entry);
         gameStateStore.clear();
@@ -834,21 +849,37 @@ public class GameActivity extends Activity {
                 StringBuilder message = new StringBuilder();
                 message.append("Score: ").append(entry.getScore()).append("\n");
                 message.append("Duration: ").append(formatDuration(entry.getDurationMillis())).append("\n\n");
-                
+
+                boolean highAchievement = false;
                 if (isPersonalBest) {
                     message.append("New Personal Best! 🌟\n");
                     startHighScoreMusic();
+                    highAchievement = true;
                 }
-                
+
                 if (globalRank > 0 && globalRank <= 10) {
                     message.append("Congratulations! You've reached #").append(globalRank).append(" on the Global Leaderboard! 🏆");
                     if (!isPersonalBest) startHighScoreMusic();
+                    highAchievement = true;
                 }
-                
+
+                if (!highAchievement) {
+                    startGameOverMusic();
+                }
+
                 showGameOverDialog(message.toString());
             });
         } else {
+            boolean beatHighScore = engine.getScore() > previousHighScore && previousHighScore > 0;
+            if (beatHighScore) {
+                startHighScoreMusic();
+            } else {
+                startGameOverMusic();
+            }
             String message = "Score: " + entry.getScore() + "\nDuration: " + formatDuration(duration);
+            if (beatHighScore) {
+                message += "\n\nNew High Score! 🌟";
+            }
             showGameOverDialog(message);
         }
     }
@@ -859,10 +890,12 @@ public class GameActivity extends Activity {
                 .setMessage(message)
                 .setPositiveButton("New Game", (dialog, which) -> {
                     stopHighScoreMusic();
+                    stopGameOverMusic();
                     startNewGame();
                 })
                 .setNegativeButton("Menu", (dialog, which) -> {
                     stopHighScoreMusic();
+                    stopGameOverMusic();
                     showTitleScreen();
                 })
                 .setCancelable(false)
@@ -989,6 +1022,16 @@ public class GameActivity extends Activity {
         }
     }
 
+    private void stopGameOverMusic() {
+        if (gameOverMusic != null) {
+            if (gameOverMusic.isPlaying()) {
+                gameOverMusic.stop();
+            }
+            gameOverMusic.release();
+            gameOverMusic = null;
+        }
+    }
+
     private void startMusic() {
         if (titleMusic == null) {
             titleMusic = MediaPlayer.create(this, R.raw.clear_blue_ascent);
@@ -1006,33 +1049,51 @@ public class GameActivity extends Activity {
         if (gameplayMusic != null) {
             stopGameplayMusic();
         }
-        
-        String selected = settingsStore.getGameplayMusic();
-        if (GameSettingsStore.MUSIC_RANDOM.equals(selected)) {
-            String[] options = {
-                    GameSettingsStore.MUSIC_CLEAR_BLUE,
-                    GameSettingsStore.MUSIC_CLOCKWORK,
-                    GameSettingsStore.MUSIC_LOGIC,
-                    GameSettingsStore.MUSIC_IRON
-            };
-            selected = options[new Random().nextInt(options.length)];
+
+        String selectedSetting = settingsStore.getGameplayMusic();
+        boolean isRandom = GameSettingsStore.MUSIC_RANDOM.equals(selectedSetting);
+        String selectedTrack;
+
+        if (isRandom) {
+            if (musicShuffleQueue.isEmpty()) {
+                musicShuffleQueue.addAll(Arrays.asList(
+                        GameSettingsStore.MUSIC_CLEAR_BLUE,
+                        GameSettingsStore.MUSIC_CLOCKWORK,
+                        GameSettingsStore.MUSIC_LOGIC,
+                        GameSettingsStore.MUSIC_IRON,
+                        GameSettingsStore.MUSIC_NOTCH,
+                        GameSettingsStore.MUSIC_SEVEN
+                ));
+                Collections.shuffle(musicShuffleQueue);
+            }
+            selectedTrack = musicShuffleQueue.remove(0);
+        } else {
+            selectedTrack = selectedSetting;
+            musicShuffleQueue.clear();
         }
-        
+
         int resId = 0;
-        if (GameSettingsStore.MUSIC_CLEAR_BLUE.equals(selected)) {
+        if (GameSettingsStore.MUSIC_CLEAR_BLUE.equals(selectedTrack)) {
             resId = R.raw.clear_blue_ascent;
-        } else if (GameSettingsStore.MUSIC_CLOCKWORK.equals(selected)) {
+        } else if (GameSettingsStore.MUSIC_CLOCKWORK.equals(selectedTrack)) {
             resId = R.raw.clockwork_bloom;
-        } else if (GameSettingsStore.MUSIC_LOGIC.equals(selected)) {
+        } else if (GameSettingsStore.MUSIC_LOGIC.equals(selectedTrack)) {
             resId = R.raw.logic_of_the_lock;
-        } else if (GameSettingsStore.MUSIC_IRON.equals(selected)) {
+        } else if (GameSettingsStore.MUSIC_IRON.equals(selectedTrack)) {
             resId = R.raw.the_iron_pivot;
+        } else if (GameSettingsStore.MUSIC_NOTCH.equals(selectedTrack)) {
+            resId = R.raw.the_final_notch;
+        } else if (GameSettingsStore.MUSIC_SEVEN.equals(selectedTrack)) {
+            resId = R.raw.seven_turns_to_open;
         }
-        
+
         if (resId != 0) {
             gameplayMusic = MediaPlayer.create(this, resId);
             if (gameplayMusic != null) {
-                gameplayMusic.setLooping(true);
+                gameplayMusic.setLooping(!isRandom);
+                if (isRandom) {
+                    gameplayMusic.setOnCompletionListener(mp -> startGameplayMusic());
+                }
                 updateMusicVolume();
                 gameplayMusic.start();
             }
@@ -1050,6 +1111,17 @@ public class GameActivity extends Activity {
         }
     }
 
+    private void startGameOverMusic() {
+        if (gameOverMusic == null) {
+            gameOverMusic = MediaPlayer.create(this, R.raw.controller_unplugged);
+            if (gameOverMusic != null) {
+                gameOverMusic.setLooping(true);
+                updateMusicVolume();
+                gameOverMusic.start();
+            }
+        }
+    }
+
     private void updateMusicVolume() {
         float volume = settingsStore.getMusicVolumePercent() / 100f;
         if (titleMusic != null) {
@@ -1060,6 +1132,9 @@ public class GameActivity extends Activity {
         }
         if (highScoreMusic != null) {
             highScoreMusic.setVolume(volume, volume);
+        }
+        if (gameOverMusic != null) {
+            gameOverMusic.setVolume(volume, volume);
         }
     }
 

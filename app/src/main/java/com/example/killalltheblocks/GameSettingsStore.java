@@ -17,6 +17,8 @@ final class GameSettingsStore {
     public static final String MUSIC_CLOCKWORK = "Clockwork Bloom";
     public static final String MUSIC_LOGIC = "Logic of the Lock";
     public static final String MUSIC_IRON = "The Iron Pivot";
+    public static final String MUSIC_SEVEN = "Seven Turns to Open";
+    public static final String MUSIC_NOTCH = "The Final Notch";
 
     private final SharedPreferences preferences;
     private FirebaseStore firebaseStore;
