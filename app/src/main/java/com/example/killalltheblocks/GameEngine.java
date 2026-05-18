@@ -192,6 +192,44 @@ public class GameEngine {
         return true;
     }
 
+    public boolean[][] predictLineClears(BlockPiece piece, int row, int col) {
+        boolean[] rowsToClear = new boolean[BOARD_SIZE];
+        boolean[] colsToClear = new boolean[BOARD_SIZE];
+
+        if (!canPlace(piece, row, col)) {
+            return new boolean[][]{rowsToClear, colsToClear};
+        }
+
+        boolean[][] tempBoard = copyBoard();
+        for (BlockPiece.Cell cell : piece.getCells()) {
+            tempBoard[row + cell.row][col + cell.col] = true;
+        }
+
+        for (int r = 0; r < BOARD_SIZE; r++) {
+            boolean complete = true;
+            for (int c = 0; c < BOARD_SIZE; c++) {
+                if (!tempBoard[r][c]) {
+                    complete = false;
+                    break;
+                }
+            }
+            if (complete) rowsToClear[r] = true;
+        }
+
+        for (int c = 0; c < BOARD_SIZE; c++) {
+            boolean complete = true;
+            for (int r = 0; r < BOARD_SIZE; r++) {
+                if (!tempBoard[r][c]) {
+                    complete = false;
+                    break;
+                }
+            }
+            if (complete) colsToClear[c] = true;
+        }
+
+        return new boolean[][]{rowsToClear, colsToClear};
+    }
+
     public boolean hasAnyMove() {
         for (BlockPiece piece : tray) {
             if (piece == null) {
