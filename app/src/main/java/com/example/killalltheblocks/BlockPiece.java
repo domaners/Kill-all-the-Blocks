@@ -5,12 +5,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
-final class BlockPiece {
-    static final class Cell {
-        final int row;
-        final int col;
+public class BlockPiece {
+    public static class Cell {
+        public final int row;
+        public final int col;
 
-        Cell(int row, int col) {
+        public Cell(int row, int col) {
             this.row = row;
             this.col = col;
         }
@@ -19,46 +19,53 @@ final class BlockPiece {
     private final String name;
     private final Cell[] cells;
     private final int color;
+    public enum Tier { EASY, MEDIUM, HARD }
+    private final Tier tier;
 
-    BlockPiece(String name, int[][] cells, int color) {
+    public BlockPiece(String name, int[][] coords, int color, Tier tier) {
         this.name = name;
-        this.cells = new Cell[cells.length];
-        for (int i = 0; i < cells.length; i++) {
-            this.cells[i] = new Cell(cells[i][0], cells[i][1]);
+        this.cells = new Cell[coords.length];
+        for (int i = 0; i < coords.length; i++) {
+            this.cells[i] = new Cell(coords[i][0], coords[i][1]);
         }
         this.color = color;
+        this.tier = tier;
     }
 
     @Override
-    public boolean equals(Object other) {
-        if (!(other instanceof BlockPiece)) {
-            return false;
-        }
-        return name.equals(((BlockPiece) other).name);
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        BlockPiece that = (BlockPiece) o;
+        return java.util.Objects.equals(name, that.name);
     }
 
     @Override
     public int hashCode() {
-        return name.hashCode();
+        return java.util.Objects.hash(name);
     }
 
-    String getName() {
+    public String getName() {
         return name;
     }
 
-    Cell[] getCells() {
+    public Cell[] getCells() {
         return cells;
     }
 
-    int getColor() {
+    public int getColor() {
         return color;
     }
 
-    int getCellCount() {
+    public Tier getTier() {
+        return tier;
+    }
+
+    public int getCellCount() {
         return cells.length;
     }
 
-    int getWidth() {
+    public int getWidth() {
         int max = 0;
         for (Cell cell : cells) {
             max = Math.max(max, cell.col);
@@ -66,7 +73,7 @@ final class BlockPiece {
         return max + 1;
     }
 
-    int getHeight() {
+    public int getHeight() {
         int max = 0;
         for (Cell cell : cells) {
             max = Math.max(max, cell.row);
@@ -74,63 +81,72 @@ final class BlockPiece {
         return max + 1;
     }
 
-    static BlockPiece random(Random random) {
-        List<BlockPiece> pieces = standardPieces();
-        return pieces.get(random.nextInt(pieces.size()));
+    public static BlockPiece random(Random random) {
+        List<BlockPiece> all = standardPieces();
+        return all.get(random.nextInt(all.size()));
     }
 
-    static BlockPiece fromName(String name) {
-        if (name == null) {
-            return null;
-        }
+    public static BlockPiece fromName(String name) {
+        if (name == null) return null;
         for (BlockPiece piece : standardPieces()) {
-            if (piece.name.equals(name)) {
+            if (piece.getName().equals(name)) {
                 return piece;
             }
         }
         return null;
     }
 
-    static List<BlockPiece> standardPieces() {
+    public static List<BlockPiece> standardPieces() {
         List<BlockPiece> pieces = new ArrayList<>();
-        pieces.add(new BlockPiece("Single", new int[][]{{0, 0}}, 0xffff1744));
-        pieces.add(new BlockPiece("Two Vertical", new int[][]{{0, 0}, {1, 0}}, 0xffd500f9));
-        pieces.add(new BlockPiece("Two Horizontal", new int[][]{{0, 0}, {0, 1}}, 0xff304ffe));
-        pieces.add(new BlockPiece("Three Vertical", new int[][]{{0, 0}, {1, 0}, {2, 0}}, 0xff00b0ff));
-        pieces.add(new BlockPiece("Three Horizontal", new int[][]{{0, 0}, {0, 1}, {0, 2}}, 0xff00c853));
-        pieces.add(new BlockPiece("Four Vertical", new int[][]{{0, 0}, {1, 0}, {2, 0}, {3, 0}}, 0xff64dd17));
-        pieces.add(new BlockPiece("Four Horizontal", new int[][]{{0, 0}, {0, 1}, {0, 2}, {0, 3}}, 0xffffd600));
-        pieces.add(new BlockPiece("Five Horizontal", new int[][]{{0, 0}, {0, 1}, {0, 2}, {0, 3}, {0, 4}}, 0xffffff00));
-        pieces.add(new BlockPiece("Square 2x2", new int[][]{{0, 0}, {0, 1}, {1, 0}, {1, 1}}, 0xffff6d00));
-        pieces.add(new BlockPiece("Square 3x3", new int[][]{
-                {0, 0}, {0, 1}, {0, 2},
-                {1, 0}, {1, 1}, {1, 2},
-                {2, 0}, {2, 1}, {2, 2}}, 0xfff50057));
+        // EASY
+        pieces.add(new BlockPiece("Single", new int[][]{{0, 0}}, 0xffff1744, Tier.EASY));
+        pieces.add(new BlockPiece("Two Vertical", new int[][]{{0, 0}, {1, 0}}, 0xffd500f9, Tier.EASY));
+        pieces.add(new BlockPiece("Two Horizontal", new int[][]{{0, 0}, {0, 1}}, 0xff304ffe, Tier.EASY));
+        pieces.add(new BlockPiece("Three Vertical", new int[][]{{0, 0}, {1, 0}, {2, 0}}, 0xff00b0ff, Tier.EASY));
+        pieces.add(new BlockPiece("Three Horizontal", new int[][]{{0, 0}, {0, 1}, {0, 2}}, 0xff00c853, Tier.EASY));
+        pieces.add(new BlockPiece("L Small", new int[][]{{0, 0}, {1, 0}, {1, 1}}, 0xff795548, Tier.EASY));
+        pieces.add(new BlockPiece("L Mirror", new int[][]{{0, 1}, {1, 0}, {1, 1}}, 0xff546e7a, Tier.EASY));
+
+        // MEDIUM
+        pieces.add(new BlockPiece("Four Vertical", new int[][]{{0, 0}, {1, 0}, {2, 0}, {3, 0}}, 0xff64dd17, Tier.MEDIUM));
+        pieces.add(new BlockPiece("Four Horizontal", new int[][]{{0, 0}, {0, 1}, {0, 2}, {0, 3}}, 0xffffd600, Tier.MEDIUM));
+        pieces.add(new BlockPiece("Square 2x2", new int[][]{{0, 0}, {0, 1}, {1, 0}, {1, 1}}, 0xffff6d00, Tier.MEDIUM));
         pieces.add(new BlockPiece("Rectangle 2x3", new int[][]{
                 {0, 0}, {0, 1}, {0, 2},
-                {1, 0}, {1, 1}, {1, 2}}, 0xff3d5afe));
+                {1, 0}, {1, 1}, {1, 2}}, 0xff3d5afe, Tier.MEDIUM));
         pieces.add(new BlockPiece("Rectangle 3x2", new int[][]{
                 {0, 0}, {0, 1},
                 {1, 0}, {1, 1},
-                {2, 0}, {2, 1}}, 0xfff44336));
-        pieces.add(new BlockPiece("Two Diagonal Down", new int[][]{{0, 0}, {1, 1}}, 0xff00e5ff));
-        pieces.add(new BlockPiece("Two Diagonal Up", new int[][]{{0, 1}, {1, 0}}, 0xff1de9b6));
-        pieces.add(new BlockPiece("Three Diagonal Down", new int[][]{{0, 0}, {1, 1}, {2, 2}}, 0xffc6ff00));
-        pieces.add(new BlockPiece("Three Diagonal Up", new int[][]{{0, 2}, {1, 1}, {2, 0}}, 0xffffab00));
-        pieces.add(new BlockPiece("L Small", new int[][]{{0, 0}, {1, 0}, {1, 1}}, 0xff795548));
-        pieces.add(new BlockPiece("L Mirror", new int[][]{{0, 1}, {1, 0}, {1, 1}}, 0xff546e7a));
-        pieces.add(new BlockPiece("L Tall", new int[][]{{0, 0}, {1, 0}, {2, 0}, {2, 1}}, 0xffff4081));
-        pieces.add(new BlockPiece("L Tall Mirror", new int[][]{{0, 1}, {1, 1}, {2, 0}, {2, 1}}, 0xff651fff));
-        pieces.add(new BlockPiece("L 3x3", new int[][]{{0, 0}, {1, 0}, {2, 0}, {2, 1}, {2, 2}}, 0xffff3d00));
-        pieces.add(new BlockPiece("L 3x3 Flip Horizontal", new int[][]{{0, 2}, {1, 2}, {2, 0}, {2, 1}, {2, 2}}, 0xffaa00ff));
-        pieces.add(new BlockPiece("L 3x3 Flip Vertical", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 0}, {2, 0}}, 0xff00e5ff));
-        pieces.add(new BlockPiece("L 3x3 Flip Both", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 2}, {2, 2}}, 0xff00e676));
-        pieces.add(new BlockPiece("T Down", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 1}}, 0xff2979ff));
-        pieces.add(new BlockPiece("T Up", new int[][]{{1, 0}, {1, 1}, {1, 2}, {0, 1}}, 0xff2979ff));
-        pieces.add(new BlockPiece("T Right", new int[][]{{0, 0}, {1, 0}, {2, 0}, {1, 1}}, 0xff2979ff));
-        pieces.add(new BlockPiece("T Left", new int[][]{{0, 1}, {1, 1}, {2, 1}, {1, 0}}, 0xff2979ff));
-        pieces.add(new BlockPiece("Z", new int[][]{{0, 0}, {0, 1}, {1, 1}, {1, 2}}, 0xff00b8d4));
-        pieces.add(new BlockPiece("S", new int[][]{{0, 1}, {0, 2}, {1, 0}, {1, 1}}, 0xff76ff03));
+                {2, 0}, {2, 1}}, 0xfff44336, Tier.MEDIUM));
+        pieces.add(new BlockPiece("L Tall", new int[][]{{0, 0}, {1, 0}, {2, 0}, {2, 1}}, 0xffff4081, Tier.MEDIUM));
+        pieces.add(new BlockPiece("L Tall Mirror", new int[][]{{0, 1}, {1, 1}, {2, 0}, {2, 1}}, 0xff651fff, Tier.MEDIUM));
+        pieces.add(new BlockPiece("T Down", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 1}}, 0xff2979ff, Tier.MEDIUM));
+        pieces.add(new BlockPiece("T Up", new int[][]{{1, 0}, {1, 1}, {1, 2}, {0, 1}}, 0xff2979ff, Tier.MEDIUM));
+        pieces.add(new BlockPiece("T Right", new int[][]{{0, 0}, {1, 0}, {2, 0}, {1, 1}}, 0xff2979ff, Tier.MEDIUM));
+        pieces.add(new BlockPiece("T Left", new int[][]{{0, 1}, {1, 1}, {2, 1}, {1, 0}}, 0xff2979ff, Tier.MEDIUM));
+        pieces.add(new BlockPiece("Z", new int[][]{{0, 0}, {0, 1}, {1, 1}, {1, 2}}, 0xff00b8d4, Tier.MEDIUM));
+        pieces.add(new BlockPiece("S", new int[][]{{0, 1}, {0, 2}, {1, 0}, {1, 1}}, 0xff76ff03, Tier.MEDIUM));
+
+        pieces.add(new BlockPiece("L 2x3 Up", new int[][]{{0, 0}, {1, 0}, {2, 0}, {2, 1}}, 0xffff4081, Tier.MEDIUM));
+        pieces.add(new BlockPiece("L 2x3 Down", new int[][]{{0, 0}, {0, 1}, {1, 1}, {2, 1}}, 0xffff4081, Tier.MEDIUM));
+        pieces.add(new BlockPiece("L 2x3 Right", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 0}}, 0xffff4081, Tier.MEDIUM));
+        pieces.add(new BlockPiece("L 2x3 Left", new int[][]{{0, 2}, {1, 0}, {1, 1}, {1, 2}}, 0xffff4081, Tier.MEDIUM));
+
+        // HARD
+        pieces.add(new BlockPiece("Five Horizontal", new int[][]{{0, 0}, {0, 1}, {0, 2}, {0, 3}, {0, 4}}, 0xffffff00, Tier.HARD));
+        pieces.add(new BlockPiece("Square 3x3", new int[][]{
+                {0, 0}, {0, 1}, {0, 2},
+                {1, 0}, {1, 1}, {1, 2},
+                {2, 0}, {2, 1}, {2, 2}}, 0xfff50057, Tier.HARD));
+        pieces.add(new BlockPiece("L 3x3", new int[][]{{0, 0}, {1, 0}, {2, 0}, {2, 1}, {2, 2}}, 0xffff3d00, Tier.HARD));
+        pieces.add(new BlockPiece("L 3x3 Flip Horizontal", new int[][]{{0, 2}, {1, 2}, {2, 0}, {2, 1}, {2, 2}}, 0xffaa00ff, Tier.HARD));
+        pieces.add(new BlockPiece("L 3x3 Flip Vertical", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 0}, {2, 0}}, 0xff00e5ff, Tier.HARD));
+        pieces.add(new BlockPiece("L 3x3 Flip Both", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 2}, {2, 2}}, 0xff00e676, Tier.HARD));
+        pieces.add(new BlockPiece("Two Diagonal Down", new int[][]{{0, 0}, {1, 1}}, 0xff00e5ff, Tier.HARD));
+        pieces.add(new BlockPiece("Two Diagonal Up", new int[][]{{0, 1}, {1, 0}}, 0xff1de9b6, Tier.HARD));
+        pieces.add(new BlockPiece("Three Diagonal Down", new int[][]{{0, 0}, {1, 1}, {2, 2}}, 0xffc6ff00, Tier.HARD));
+        pieces.add(new BlockPiece("Three Diagonal Up", new int[][]{{0, 2}, {1, 1}, {2, 0}}, 0xffffab00, Tier.HARD));
+
         return Collections.unmodifiableList(pieces);
     }
 }

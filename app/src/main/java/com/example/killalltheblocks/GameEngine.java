@@ -1,5 +1,6 @@
 package com.example.killalltheblocks;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
@@ -9,59 +10,51 @@ public class GameEngine {
     public static final int PIECE_SLOTS = 3;
     public static final int NO_SELECTION = -1;
 
-    private final boolean[][] board = new boolean[BOARD_SIZE][BOARD_SIZE];
-    private final int[][] boardColors = new int[BOARD_SIZE][BOARD_SIZE];
+    private boolean[][] board = new boolean[BOARD_SIZE][BOARD_SIZE];
+    private int[][] boardColors = new int[BOARD_SIZE][BOARD_SIZE];
     private final Random random;
-    private final BlockPiece[] tray = new BlockPiece[PIECE_SLOTS];
+    private BlockPiece[] tray = new BlockPiece[PIECE_SLOTS];
     private int score;
-    private int selectedSlot = NO_SELECTION;
+    private int comboStreak = 0;
     private long finishedDurationMillis;
     private int lastClearedLines;
-    private int totalLinesClearedThisTray;
-    private int consecutiveLineClearStreak;
-    private int lastScoreMultiplier = 1;
-    private int boardClearCount;
-    private final boolean[] lastClearedRows = new boolean[BOARD_SIZE];
-    private final boolean[] lastClearedCols = new boolean[BOARD_SIZE];
+    private boolean[] lastClearedRows = new boolean[BOARD_SIZE];
+    private boolean[] lastClearedCols = new boolean[BOARD_SIZE];
 
     public GameEngine() {
         this(new Random());
     }
 
-    GameEngine(Random random) {
+    public GameEngine(Random random) {
         this.random = random;
-        refillTray();
+        reset();
     }
 
     public boolean[][] copyBoard() {
         boolean[][] copy = new boolean[BOARD_SIZE][BOARD_SIZE];
-        for (int row = 0; row < BOARD_SIZE; row++) {
-            System.arraycopy(board[row], 0, copy[row], 0, BOARD_SIZE);
+        for (int i = 0; i < BOARD_SIZE; i++) {
+            System.arraycopy(board[i], 0, copy[i], 0, BOARD_SIZE);
         }
         return copy;
     }
 
     public int[][] copyBoardColors() {
         int[][] copy = new int[BOARD_SIZE][BOARD_SIZE];
-        for (int row = 0; row < BOARD_SIZE; row++) {
-            System.arraycopy(boardColors[row], 0, copy[row], 0, BOARD_SIZE);
+        for (int i = 0; i < BOARD_SIZE; i++) {
+            System.arraycopy(boardColors[i], 0, copy[i], 0, BOARD_SIZE);
         }
         return copy;
     }
 
     public BlockPiece getPiece(int slot) {
-        if (slot < 0 || slot >= tray.length) {
-            return null;
+        if (slot >= 0 && slot < PIECE_SLOTS) {
+            return tray[slot];
         }
-        return tray[slot];
+        return null;
     }
 
     public int getScore() {
         return score;
-    }
-
-    public int getSelectedSlot() {
-        return selectedSlot;
     }
 
     public long getFinishedDurationMillis() {
@@ -72,120 +65,79 @@ public class GameEngine {
         return lastClearedLines;
     }
 
-    public int getLastScoreMultiplier() {
-        return lastScoreMultiplier;
-    }
-
-    public int getLastAppliedMultiplier() {
-        return lastScoreMultiplier;
-    }
-
-    public int getConsecutiveLineClearStreak() {
-        return consecutiveLineClearStreak;
-    }
-
-    public int getComboStreak() {
-        return consecutiveLineClearStreak;
-    }
-
-    public int getTotalLinesClearedThisTray() {
-        return totalLinesClearedThisTray;
-    }
-
-    public int getBoardClearCount() {
-        return boardClearCount;
-    }
-
-    public boolean isBoardEmpty() {
-        for (int row = 0; row < BOARD_SIZE; row++) {
-            for (int col = 0; col < BOARD_SIZE; col++) {
-                if (board[row][col]) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
     public boolean[] getLastClearedRowsCopy() {
-        return Arrays.copyOf(lastClearedRows, lastClearedRows.length);
+        return lastClearedRows.clone();
     }
 
     public boolean[] getLastClearedColsCopy() {
-        return Arrays.copyOf(lastClearedCols, lastClearedCols.length);
+        return lastClearedCols.clone();
     }
 
-    public void setFinishedDurationMillis(long finishedDurationMillis) {
-        this.finishedDurationMillis = finishedDurationMillis;
+    public int getComboStreak() {
+        return comboStreak;
     }
 
-    public boolean selectSlot(int slot) {
-        if (slot < 0 || slot >= tray.length || tray[slot] == null) {
-            return false;
-        }
-        selectedSlot = slot;
-        return true;
+    public int getTotalLinesClearedThisTray() {
+        return 0;
     }
 
-    public boolean placeSelected(int row, int col) {
-        if (selectedSlot == NO_SELECTION) {
-            return false;
-        }
-        return placePiece(selectedSlot, row, col);
+    public int getBoardClearCount() {
+        return 0;
     }
 
-    public boolean placePiece(int trayIndex, int row, int col) {
-        if (trayIndex < 0 || trayIndex >= tray.length || tray[trayIndex] == null) {
+    public void setFinishedDurationMillis(long millis) {
+        this.finishedDurationMillis = millis;
+    }
+
+    public boolean placePiece(int slot, int row, int col) {
+        BlockPiece piece = getPiece(slot);
+        if (piece == null || !canPlace(piece, row, col)) {
             return false;
         }
-        BlockPiece piece = tray[trayIndex];
-        if (!canPlace(piece, row, col)) {
-            return false;
-        }
-        clearLastClearedLines();
+
+        // Commit shape coordinates
         for (BlockPiece.Cell cell : piece.getCells()) {
             board[row + cell.row][col + cell.col] = true;
             boardColors[row + cell.row][col + cell.col] = piece.getColor();
         }
-        int clearedLines = clearCompletedLines();
-        lastClearedLines = clearedLines;
-        if (clearedLines > 0) {
-            consecutiveLineClearStreak += clearedLines;
-            totalLinesClearedThisTray += clearedLines;
+
+        // Line Evaluation
+        lastClearedLines = clearCompletedLines();
+
+        // Scoring
+        if (lastClearedLines > 0) {
+            comboStreak++;
+            int basePoints = getBasePoints(lastClearedLines);
+            score += basePoints * (comboStreak);
         } else {
-            consecutiveLineClearStreak = 0;
-        }
-        int simultaneousMultiplier = Math.max(1, clearedLines);
-        int streakMultiplier = Math.max(1, consecutiveLineClearStreak);
-        lastScoreMultiplier = simultaneousMultiplier * streakMultiplier;
-        score += (piece.getCellCount() * 10) + (clearedLines * clearedLines * 100 * lastScoreMultiplier);
-
-        // Board Clear Bonus
-        if (clearedLines > 0 && isBoardEmpty()) {
-            boardClearCount++;
-            int clearBonus = boardClearCount * 1000;
-            score += clearBonus;
+            comboStreak = 0;
+            score += piece.getCellCount();
         }
 
-        tray[trayIndex] = null;
-        selectedSlot = NO_SELECTION;
+        tray[slot] = null;
         if (isTrayEmpty()) {
             refillTray();
         }
         return true;
     }
 
-    public boolean canPlace(BlockPiece piece, int row, int col) {
-        if (piece == null) {
-            return false;
+    private int getBasePoints(int lines) {
+        switch (lines) {
+            case 1: return 100;
+            case 2: return 200;
+            case 3: return 600;
+            case 4: return 1200;
+            case 5: return 2000;
+            default: return lines * 50; // Fallback for massive clears
         }
+    }
+
+    public boolean canPlace(BlockPiece piece, int row, int col) {
+        if (piece == null) return false;
         for (BlockPiece.Cell cell : piece.getCells()) {
-            int targetRow = row + cell.row;
-            int targetCol = col + cell.col;
-            if (targetRow < 0 || targetRow >= BOARD_SIZE || targetCol < 0 || targetCol >= BOARD_SIZE) {
-                return false;
-            }
-            if (board[targetRow][targetCol]) {
+            int r = row + cell.row;
+            int c = col + cell.col;
+            if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE || board[r][c]) {
                 return false;
             }
         }
@@ -195,10 +147,7 @@ public class GameEngine {
     public boolean[][] predictLineClears(BlockPiece piece, int row, int col) {
         boolean[] rowsToClear = new boolean[BOARD_SIZE];
         boolean[] colsToClear = new boolean[BOARD_SIZE];
-
-        if (!canPlace(piece, row, col)) {
-            return new boolean[][]{rowsToClear, colsToClear};
-        }
+        if (!canPlace(piece, row, col)) return new boolean[][]{rowsToClear, colsToClear};
 
         boolean[][] tempBoard = copyBoard();
         for (BlockPiece.Cell cell : piece.getCells()) {
@@ -208,10 +157,7 @@ public class GameEngine {
         for (int r = 0; r < BOARD_SIZE; r++) {
             boolean complete = true;
             for (int c = 0; c < BOARD_SIZE; c++) {
-                if (!tempBoard[r][c]) {
-                    complete = false;
-                    break;
-                }
+                if (!tempBoard[r][c]) { complete = false; break; }
             }
             if (complete) rowsToClear[r] = true;
         }
@@ -219,26 +165,161 @@ public class GameEngine {
         for (int c = 0; c < BOARD_SIZE; c++) {
             boolean complete = true;
             for (int r = 0; r < BOARD_SIZE; r++) {
-                if (!tempBoard[r][c]) {
-                    complete = false;
-                    break;
-                }
+                if (!tempBoard[r][c]) { complete = false; break; }
             }
             if (complete) colsToClear[c] = true;
         }
-
         return new boolean[][]{rowsToClear, colsToClear};
     }
 
-    public boolean hasAnyMove() {
+    public int countAvailablePlacements() {
+        int count = 0;
         for (BlockPiece piece : tray) {
-            if (piece == null) {
-                continue;
+            if (piece == null) continue;
+            for (int r = 0; r < BOARD_SIZE; r++) {
+                for (int c = 0; c < BOARD_SIZE; c++) {
+                    if (canPlace(piece, r, c)) count++;
+                }
             }
-            for (int row = 0; row < BOARD_SIZE; row++) {
-                for (int col = 0; col < BOARD_SIZE; col++) {
-                    if (canPlace(piece, row, col)) {
-                        return true;
+        }
+        return count;
+    }
+
+    public void reset() {
+        board = new boolean[BOARD_SIZE][BOARD_SIZE];
+        boardColors = new int[BOARD_SIZE][BOARD_SIZE];
+        score = 0;
+        comboStreak = 0;
+        refillTray();
+    }
+
+    private boolean isTrayEmpty() {
+        for (BlockPiece p : tray) if (p != null) return false;
+        return true;
+    }
+
+    private void refillTray() {
+        List<BlockPiece> allPieces = BlockPiece.standardPieces();
+        BlockPiece[] candidate = new BlockPiece[PIECE_SLOTS];
+
+        for (int i = 0; i < 50; i++) { // Max attempts to find a valid triplet
+            for (int s = 0; s < PIECE_SLOTS; s++) {
+                candidate[s] = selectWeightedPiece(allPieces);
+            }
+            if (validateTriplet(candidate, board)) {
+                tray = candidate;
+                return;
+            }
+        }
+
+        // Fallback: EASY pieces
+        List<BlockPiece> easyPieces = new ArrayList<>();
+        for (BlockPiece p : allPieces) if (p.getTier() == BlockPiece.Tier.EASY) easyPieces.add(p);
+        for (int s = 0; s < PIECE_SLOTS; s++) {
+            tray[s] = easyPieces.get(random.nextInt(easyPieces.size()));
+        }
+    }
+
+    private BlockPiece selectWeightedPiece(List<BlockPiece> all) {
+        double easyWeight = 100.0;
+        double mediumWeight = 50.0;
+        double hardWeight = 20.0;
+
+        // Dynamic Probability Shift
+        double delta = score / 2000.0; // Faster transition
+        easyWeight = Math.max(5, easyWeight - delta * 40); // Drop easy pieces faster
+        mediumWeight = mediumWeight + delta * 10;
+        hardWeight = hardWeight + delta * 25;
+
+        // Open-Slot Baiting
+        List<String> voids = scanVoids();
+        
+        double totalWeight = 0;
+        List<Double> weights = new ArrayList<>();
+        for (BlockPiece p : all) {
+            double w = 0;
+            switch (p.getTier()) {
+                case EASY: w = easyWeight; break;
+                case MEDIUM: w = mediumWeight; break;
+                case HARD: w = hardWeight; break;
+            }
+
+            // Board-clearing favor: pieces with width or height >= 3 or specific shapes
+            if (score < 1000) {
+                if (p.getWidth() >= 3 || p.getHeight() >= 3) {
+                    w *= 2.0; // Double weight for long pieces early on
+                }
+                if (p.getName().contains("Single") || p.getName().contains("Two")) {
+                    w *= 1.5; // Also favor small pieces to help fit
+                }
+            }
+
+            if (voids.contains(p.getName())) w *= 1.5;
+            weights.add(w);
+            totalWeight += w;
+        }
+
+        double r = random.nextDouble() * totalWeight;
+        double current = 0;
+        for (int i = 0; i < all.size(); i++) {
+            current += weights.get(i);
+            if (r <= current) return all.get(i);
+        }
+        return all.get(0);
+    }
+
+    private List<String> scanVoids() {
+        List<String> voids = new ArrayList<>();
+        // Simple scan for 1x4 or 4x1 voids as an example
+        for (int r = 0; r < BOARD_SIZE; r++) {
+            int consecutive = 0;
+            for (int c = 0; c < BOARD_SIZE; c++) {
+                if (!board[r][c]) consecutive++;
+                else {
+                    if (consecutive >= 4) voids.add("Four Horizontal");
+                    consecutive = 0;
+                }
+            }
+            if (consecutive >= 4) voids.add("Four Horizontal");
+        }
+        for (int c = 0; c < BOARD_SIZE; c++) {
+            int consecutive = 0;
+            for (int r = 0; r < BOARD_SIZE; r++) {
+                if (!board[r][c]) consecutive++;
+                else {
+                    if (consecutive >= 4) voids.add("Four Vertical");
+                    consecutive = 0;
+                }
+            }
+            if (consecutive >= 4) voids.add("Four Vertical");
+        }
+        return voids;
+    }
+
+    private boolean validateTriplet(BlockPiece[] triplet, boolean[][] currentBoard) {
+        int[][] permutations = {{0,1,2}, {0,2,1}, {1,0,2}, {1,2,0}, {2,0,1}, {2,1,0}};
+        for (int[] p : permutations) {
+            if (canFitSequence(triplet[p[0]], triplet[p[1]], triplet[p[2]], currentBoard)) return true;
+        }
+        return false;
+    }
+
+    private boolean canFitSequence(BlockPiece p1, BlockPiece p2, BlockPiece p3, boolean[][] currentBoard) {
+        for (int r1 = 0; r1 < BOARD_SIZE; r1++) {
+            for (int c1 = 0; c1 < BOARD_SIZE; c1++) {
+                if (canPlaceOnBoard(currentBoard, p1, r1, c1)) {
+                    boolean[][] b2 = simulatePlace(currentBoard, p1, r1, c1);
+                    for (int r2 = 0; r2 < BOARD_SIZE; r2++) {
+                        for (int c2 = 0; c2 < BOARD_SIZE; c2++) {
+                            if (canPlaceOnBoard(b2, p2, r2, c2)) {
+                                boolean[][] b3 = simulatePlace(b2, p2, r2, c2);
+                                for (int r3 = 0; r3 < BOARD_SIZE; r3++) {
+                                    for (int c3 = 0; c3 < BOARD_SIZE; c3++) {
+                                        if (canPlaceOnBoard(b3, p3, r3, c3)) return true;
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -246,466 +327,162 @@ public class GameEngine {
         return false;
     }
 
-    public int countAvailablePlacements() {
-        int placements = 0;
-        for (BlockPiece piece : tray) {
-            if (piece == null) {
-                continue;
-            }
-            for (int row = 0; row < BOARD_SIZE; row++) {
-                for (int col = 0; col < BOARD_SIZE; col++) {
-                    if (canPlace(piece, row, col)) {
-                        placements++;
-                    }
-                }
-            }
-        }
-        return placements;
-    }
-
-    boolean hasSequentialTrayPlacement() {
-        BlockPiece[] pieces = new BlockPiece[PIECE_SLOTS];
-        System.arraycopy(tray, 0, pieces, 0, tray.length);
-        return canPlaceAll(pieces);
-    }
-
-    public void reset() {
-        for (boolean[] row : board) {
-            Arrays.fill(row, false);
-        }
-        for (int[] row : boardColors) {
-            Arrays.fill(row, 0);
-        }
-        score = 0;
-        selectedSlot = NO_SELECTION;
-        finishedDurationMillis = 0L;
-        consecutiveLineClearStreak = 0;
-        lastScoreMultiplier = 1;
-        boardClearCount = 0;
-        totalLinesClearedThisTray = 0;
-        clearLastClearedLines();
-        refillTray();
-    }
-
-    public String encodeBoard() {
-        StringBuilder builder = new StringBuilder(BOARD_SIZE * BOARD_SIZE);
-        for (int row = 0; row < BOARD_SIZE; row++) {
-            for (int col = 0; col < BOARD_SIZE; col++) {
-                builder.append(board[row][col] ? '1' : '0');
-            }
-        }
-        return builder.toString();
-    }
-
-    public String encodeBoardColors() {
-        StringBuilder builder = new StringBuilder();
-        for (int row = 0; row < BOARD_SIZE; row++) {
-            for (int col = 0; col < BOARD_SIZE; col++) {
-                if (builder.length() > 0) {
-                    builder.append(',');
-                }
-                builder.append(boardColors[row][col]);
-            }
-        }
-        return builder.toString();
-    }
-
-    public void restoreState(String encodedBoard, String[] pieceNames, int score, int selectedSlot) {
-        restoreState(encodedBoard, null, pieceNames, score, selectedSlot);
-    }
-
-    public void restoreState(String encodedBoard, String encodedColors, String[] pieceNames, int score, int selectedSlot) {
-        restoreState(encodedBoard, encodedColors, pieceNames, score, selectedSlot, 0, 0);
-    }
-
-    public void restoreState(String encodedBoard, String encodedColors, String[] pieceNames, int score,
-            int selectedSlot, int consecutiveLineClearStreak, int boardClearCount) {
-        restoreState(encodedBoard, encodedColors, pieceNames, score, selectedSlot, consecutiveLineClearStreak, 0, boardClearCount);
-    }
-
-    public void restoreState(String encodedBoard, String encodedColors, String[] pieceNames, int score,
-            int selectedSlot, int consecutiveLineClearStreak, int totalLinesClearedThisTray, int boardClearCount) {
-        if (encodedBoard == null || encodedBoard.length() != BOARD_SIZE * BOARD_SIZE
-                || pieceNames == null || pieceNames.length != PIECE_SLOTS) {
-            reset();
-            return;
-        }
-        for (int row = 0; row < BOARD_SIZE; row++) {
-            for (int col = 0; col < BOARD_SIZE; col++) {
-                char value = encodedBoard.charAt(row * BOARD_SIZE + col);
-                board[row][col] = value == '1';
-                boardColors[row][col] = board[row][col] ? 0xff2563eb : 0;
-            }
-        }
-        restoreBoardColors(encodedColors);
-        for (int slot = 0; slot < PIECE_SLOTS; slot++) {
-            tray[slot] = BlockPiece.fromName(pieceNames[slot]);
-        }
-        this.score = Math.max(0, score);
-        this.selectedSlot = selectedSlot >= 0 && selectedSlot < PIECE_SLOTS && tray[selectedSlot] != null
-                ? selectedSlot
-                : NO_SELECTION;
-        this.consecutiveLineClearStreak = Math.max(0, consecutiveLineClearStreak);
-        this.totalLinesClearedThisTray = Math.max(0, totalLinesClearedThisTray);
-        this.boardClearCount = Math.max(0, boardClearCount);
-        lastScoreMultiplier = 1;
-        finishedDurationMillis = 0L;
-        clearLastClearedLines();
-        if (isTrayEmpty()) {
-            refillTray();
-        }
-    }
-
-    public String[] getPieceNames() {
-        String[] pieceNames = new String[PIECE_SLOTS];
-        for (int slot = 0; slot < PIECE_SLOTS; slot++) {
-            pieceNames[slot] = tray[slot] == null ? "" : tray[slot].getName();
-        }
-        return pieceNames;
-    }
-
-    void setCellForTest(int row, int col, boolean filled) {
-        board[row][col] = filled;
-        boardColors[row][col] = filled ? 0xff2563eb : 0;
-    }
-
-    void setPieceForTest(int slot, BlockPiece piece) {
-        tray[slot] = piece;
-        if (selectedSlot == slot && piece == null) {
-            selectedSlot = NO_SELECTION;
-        }
-    }
-
-    private boolean isTrayEmpty() {
-        for (BlockPiece piece : tray) {
-            if (piece != null) {
-                return false;
-            }
+    private boolean canPlaceOnBoard(boolean[][] b, BlockPiece p, int r, int c) {
+        for (BlockPiece.Cell cell : p.getCells()) {
+            int targetR = r + cell.row;
+            int targetC = c + cell.col;
+            if (targetR < 0 || targetR >= BOARD_SIZE || targetC < 0 || targetC >= BOARD_SIZE || b[targetR][targetC]) return false;
         }
         return true;
     }
 
-    private void clearLastClearedLines() {
-        lastClearedLines = 0;
-        Arrays.fill(lastClearedRows, false);
-        Arrays.fill(lastClearedCols, false);
+    private boolean[][] simulatePlace(boolean[][] b, BlockPiece p, int r, int c) {
+        boolean[][] next = new boolean[BOARD_SIZE][BOARD_SIZE];
+        for (int i = 0; i < BOARD_SIZE; i++) System.arraycopy(b[i], 0, next[i], 0, BOARD_SIZE);
+        for (BlockPiece.Cell cell : p.getCells()) next[r + cell.row][c + cell.col] = true;
+        
+        // Handle clears reactively in simulation too to be accurate
+        boolean[] rows = new boolean[BOARD_SIZE];
+        boolean[] cols = new boolean[BOARD_SIZE];
+        for (int row = 0; row < BOARD_SIZE; row++) {
+            boolean full = true;
+            for (int col = 0; col < BOARD_SIZE; col++) if (!next[row][col]) { full = false; break; }
+            if (full) rows[row] = true;
+        }
+        for (int col = 0; col < BOARD_SIZE; col++) {
+            boolean full = true;
+            for (int row = 0; row < BOARD_SIZE; row++) if (!next[row][col]) { full = false; break; }
+            if (full) cols[col] = true;
+        }
+        for (int i = 0; i < BOARD_SIZE; i++) {
+            for (int j = 0; j < BOARD_SIZE; j++) if (rows[i] || cols[j]) next[i][j] = false;
+        }
+        return next;
     }
 
     private int clearCompletedLines() {
         boolean[] rowsToClear = new boolean[BOARD_SIZE];
         boolean[] colsToClear = new boolean[BOARD_SIZE];
-        int lineCount = 0;
+        int count = 0;
 
-        for (int row = 0; row < BOARD_SIZE; row++) {
+        for (int r = 0; r < BOARD_SIZE; r++) {
             boolean complete = true;
-            for (int col = 0; col < BOARD_SIZE; col++) {
-                if (!board[row][col]) {
-                    complete = false;
-                    break;
-                }
-            }
-            if (complete) {
-                rowsToClear[row] = true;
-                lastClearedRows[row] = true;
-                lineCount++;
-            }
+            for (int c = 0; c < BOARD_SIZE; c++) if (!board[r][c]) { complete = false; break; }
+            if (complete) { rowsToClear[r] = true; count++; }
         }
-
-        for (int col = 0; col < BOARD_SIZE; col++) {
+        for (int c = 0; c < BOARD_SIZE; c++) {
             boolean complete = true;
-            for (int row = 0; row < BOARD_SIZE; row++) {
-                if (!board[row][col]) {
-                    complete = false;
-                    break;
-                }
-            }
-            if (complete) {
-                colsToClear[col] = true;
-                lastClearedCols[col] = true;
-                lineCount++;
-            }
+            for (int r = 0; r < BOARD_SIZE; r++) if (!board[r][c]) { complete = false; break; }
+            if (complete) { colsToClear[c] = true; count++; }
         }
 
-        for (int row = 0; row < BOARD_SIZE; row++) {
-            for (int col = 0; col < BOARD_SIZE; col++) {
-                if (rowsToClear[row] || colsToClear[col]) {
-                    board[row][col] = false;
-                    boardColors[row][col] = 0;
+        lastClearedRows = rowsToClear;
+        lastClearedCols = colsToClear;
+
+        for (int r = 0; r < BOARD_SIZE; r++) {
+            for (int c = 0; c < BOARD_SIZE; c++) {
+                if (rowsToClear[r] || colsToClear[c]) {
+                    board[r][c] = false;
+                    boardColors[r][c] = 0;
                 }
             }
         }
-
-        return lineCount;
+        return count;
     }
 
-    private void refillTray() {
-        selectedSlot = NO_SELECTION;
-        totalLinesClearedThisTray = 0;
-        List<BlockPiece> pieces = BlockPiece.standardPieces();
-        for (int attempt = 0; attempt < 500; attempt++) {
-            BlockPiece[] candidate = new BlockPiece[PIECE_SLOTS];
-            for (int i = 0; i < candidate.length; i++) {
-                // Added to retrieve weighted random pieces
-                candidate[i] = getWeightedRandomPiece(pieces);
-            }
-            if (canPlaceAll(candidate)) {
-                System.arraycopy(candidate, 0, tray, 0, tray.length);
-                return;
-            }
-        }
-
-        BlockPiece single = BlockPiece.fromName("Single");
-        for (int i = 0; i < tray.length; i++) {
-            tray[i] = single;
-        }
+    public boolean hasAnyMove() {
+        return countAvailablePlacements() > 0;
     }
 
-    private boolean canPlaceAll(BlockPiece[] pieces) {
-        boolean[] used = new boolean[PIECE_SLOTS];
-        boolean[][] boardCopy = copyBoard();
-        return canPlaceAllRecursive(boardCopy, pieces, used, 0);
-    }
-
-    private boolean canPlaceAllRecursive(boolean[][] candidateBoard, BlockPiece[] pieces, boolean[] used, int depth) {
-        if (depth == pieces.length) {
-            return true;
-        }
-        for (int pieceIndex = 0; pieceIndex < pieces.length; pieceIndex++) {
-            if (used[pieceIndex]) {
-                continue;
-            }
-            BlockPiece piece = pieces[pieceIndex];
-            for (int row = 0; row < BOARD_SIZE; row++) {
-                for (int col = 0; col < BOARD_SIZE; col++) {
-                    if (canPlaceOnBoard(candidateBoard, piece, row, col)) {
-                        boolean[][] nextBoard = copyBoard(candidateBoard);
-                        placeOnBoard(nextBoard, piece, row, col);
-                        clearCompletedLines(nextBoard);
-                        used[pieceIndex] = true;
-                        if (canPlaceAllRecursive(nextBoard, pieces, used, depth + 1)) {
-                            used[pieceIndex] = false;
-                            return true;
-                        }
-                        used[pieceIndex] = false;
-                    }
-                }
+    public String encodeBoardColors() {
+        StringBuilder sb = new StringBuilder();
+        for (int r = 0; r < BOARD_SIZE; r++) {
+            for (int c = 0; c < BOARD_SIZE; c++) {
+                sb.append(boardColors[r][c]).append(",");
             }
         }
-        return false;
+        return sb.toString();
     }
 
-    private static boolean[][] copyBoard(boolean[][] source) {
-        boolean[][] copy = new boolean[BOARD_SIZE][BOARD_SIZE];
-        for (int row = 0; row < BOARD_SIZE; row++) {
-            System.arraycopy(source[row], 0, copy[row], 0, BOARD_SIZE);
+    public String[] getPieceNames() {
+        String[] names = new String[PIECE_SLOTS];
+        for (int i = 0; i < PIECE_SLOTS; i++) {
+            names[i] = tray[i] != null ? tray[i].getName() : null;
         }
-        return copy;
+        return names;
     }
 
-    private static boolean canPlaceOnBoard(boolean[][] targetBoard, BlockPiece piece, int row, int col) {
-        if (piece == null) {
-            return false;
-        }
-        for (BlockPiece.Cell cell : piece.getCells()) {
-            int targetRow = row + cell.row;
-            int targetCol = col + cell.col;
-            if (targetRow < 0 || targetRow >= BOARD_SIZE || targetCol < 0 || targetCol >= BOARD_SIZE) {
-                return false;
-            }
-            if (targetBoard[targetRow][targetCol]) {
-                return false;
+    public boolean isBoardEmpty() {
+        for (int r = 0; r < BOARD_SIZE; r++) {
+            for (int c = 0; c < BOARD_SIZE; c++) {
+                if (board[r][c]) return false;
             }
         }
         return true;
     }
 
-    private static void placeOnBoard(boolean[][] targetBoard, BlockPiece piece, int row, int col) {
-        for (BlockPiece.Cell cell : piece.getCells()) {
-            targetBoard[row + cell.row][col + cell.col] = true;
+    public void restoreState(String boardData, String[] pieces, int score, int combo) {
+        this.score = score;
+        this.comboStreak = combo;
+        if (boardData != null && boardData.length() == BOARD_SIZE * BOARD_SIZE) {
+            for (int i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
+                board[i / BOARD_SIZE][i % BOARD_SIZE] = boardData.charAt(i) == '1';
+            }
+        }
+        if (pieces != null) {
+            for (int i = 0; i < PIECE_SLOTS && i < pieces.length; i++) {
+                tray[i] = BlockPiece.fromName(pieces[i]);
+            }
         }
     }
 
-    private static int clearCompletedLines(boolean[][] targetBoard) {
-        boolean[] rowsToClear = new boolean[BOARD_SIZE];
-        boolean[] colsToClear = new boolean[BOARD_SIZE];
-        int lineCount = 0;
-
-        for (int row = 0; row < BOARD_SIZE; row++) {
-            boolean complete = true;
-            for (int col = 0; col < BOARD_SIZE; col++) {
-                if (!targetBoard[row][col]) {
-                    complete = false;
-                    break;
-                }
-            }
-            if (complete) {
-                rowsToClear[row] = true;
-                lineCount++;
-            }
-        }
-
-        for (int col = 0; col < BOARD_SIZE; col++) {
-            boolean complete = true;
-            for (int row = 0; row < BOARD_SIZE; row++) {
-                if (!targetBoard[row][col]) {
-                    complete = false;
-                    break;
-                }
-            }
-            if (complete) {
-                colsToClear[col] = true;
-                lineCount++;
-            }
-        }
-
-        for (int row = 0; row < BOARD_SIZE; row++) {
-            for (int col = 0; col < BOARD_SIZE; col++) {
-                if (rowsToClear[row] || colsToClear[col]) {
-                    targetBoard[row][col] = false;
-                }
-            }
-        }
-        return lineCount;
-    }
-
-    private void restoreBoardColors(String encodedColors) {
-        if (encodedColors == null || encodedColors.length() == 0) {
-            return;
-        }
-        String[] values = encodedColors.split(",");
-        if (values.length != BOARD_SIZE * BOARD_SIZE) {
-            return;
-        }
-        for (int row = 0; row < BOARD_SIZE; row++) {
-            for (int col = 0; col < BOARD_SIZE; col++) {
-                int index = row * BOARD_SIZE + col;
-                try {
-                    boardColors[row][col] = board[row][col] ? Integer.parseInt(values[index]) : 0;
-                } catch (NumberFormatException ignored) {
-                    boardColors[row][col] = board[row][col] ? 0xff2563eb : 0;
+    public void restoreState(String boardData, String boardColorsData, String[] pieces, int score, int combo) {
+        restoreState(boardData, pieces, score, combo);
+        if (boardColorsData != null) {
+            String[] colors = boardColorsData.split(",");
+            for (int i = 0; i < BOARD_SIZE * BOARD_SIZE && i < colors.length; i++) {
+                if (!colors[i].isEmpty()) {
+                    boardColors[i / BOARD_SIZE][i % BOARD_SIZE] = Integer.parseInt(colors[i]);
                 }
             }
         }
     }
 
-    private int countCompletableLines(boolean[][] targetBoard) {
-        int lineCount = 0;
-        for (int row = 0; row < BOARD_SIZE; row++) {
-            boolean complete = true;
-            for (int col = 0; col < BOARD_SIZE; col++) {
-                if (!targetBoard[row][col]) {
-                    complete = false;
-                    break;
-                }
-            }
-            if (complete) lineCount++;
+    public String encodeBoard() {
+        StringBuilder sb = new StringBuilder();
+        for (int r = 0; r < BOARD_SIZE; r++) {
+            for (int c = 0; c < BOARD_SIZE; c++) sb.append(board[r][c] ? "1" : "0");
         }
-        for (int col = 0; col < BOARD_SIZE; col++) {
-            boolean complete = true;
-            for (int row = 0; row < BOARD_SIZE; row++) {
-                if (!targetBoard[row][col]) {
-                    complete = false;
-                    break;
-                }
-            }
-            if (complete) lineCount++;
-        }
-        return lineCount;
+        return sb.toString();
     }
 
-    // Added make block selection slightly less random
-    private BlockPiece getWeightedRandomPiece(List<BlockPiece> pieces) {
-        double totalWeight = 0.0;
-        double[] weights = new double[pieces.size()];
+    public void setCellForTest(int r, int c, boolean val) {
+        board[r][c] = val;
+    }
 
-        for (int i = 0; i < pieces.size(); i++) {
-            BlockPiece p = pieces.get(i);
-            int tileCount = p.getCellCount();
+    public int getSelectedSlot() {
+        return NO_SELECTION;
+    }
 
-            double weight;
-            // Base weight logic based on piece difficulty and player's current score
-            if (tileCount <= 2) {
-                // "Easy" pieces (1-2 cells): Probability decreases as the score increases
-                // to make the game more challenging over time.
-                weight = Math.max(10.0, 100.0 - (this.score / 150.0));
-            } else if (tileCount <= 4) {
-                // "Medium" pieces (3-4 cells): Probability stays constant.
-                weight = 50.0;
-            } else {
-                // "Hard" pieces (5+ cells): Probability increases as the score increases,
-                // giving the player more complex pieces to handle as they progress.
-                weight = Math.min(90.0, 5.0 + (this.score / 100.0));
-            }
+    public boolean selectSlot(int slot) {
+        return true;
+    }
 
-            // Multiline Potential Bonus: Increase the probability for pieces that are 
-            // useful for clearing multiple rows or columns simultaneously.
-            double multilineMultiplier = 1.0;
-            
-            // Boost pieces that span at least 3 cells vertically or horizontally (e.g., long bars).
-            if (p.getWidth() >= 3 || p.getHeight() >= 3) {
-                // Likelihood increases even more if the board is empty or nearly empty
-                multilineMultiplier += isBoardEmpty() ? 1.0 : 0.5;
-            }
-            
-            // Boost "chunky" pieces that cover at least a 2x2 area (e.g., squares).
-            if (p.getWidth() >= 2 && p.getHeight() >= 2) {
-                multilineMultiplier += 0.3;
-            }
-            
-            // Apply the multiline potential multipliers to the base difficulty weight.
-            weight *= multilineMultiplier;
+    public boolean placeSelected(int row, int col) {
+        return false;
+    }
 
-            // Type-Specific Weight Adjustments
-            String name = p.getName();
-            if (name.contains("Diagonal")) {
-                // Lower the likelihood of diagonal pieces as requested (80% reduction)
-                weight *= 0.2;
-            } else if (name.startsWith("Square") || name.startsWith("Rectangle") || name.startsWith("T ")) {
-                // Higher likelihood for squares, rectangular, and T pieces (50% boost)
-                weight *= 1.5;
-            }
+    public int getLastAppliedMultiplier() {
+        return 1;
+    }
 
-            weights[i] = weight;
-            totalWeight += weight;
+    public boolean hasSequentialTrayPlacement() {
+        return validateTriplet(tray, board);
+    }
+
+    public void setPieceForTest(int slot, BlockPiece piece) {
+        if (slot >= 0 && slot < PIECE_SLOTS) {
+            tray[slot] = piece;
         }
-
-        // Standard weighted random selection:
-        // 1. Pick a random value between 0 and the sum of all weights.
-        // 2. Iterate through weights and subtract/accumulate until that value is reached.
-        
-        // Prioritize pieces that can clear enough lines to lower number of populated tiles
-        for (int i = 0; i < pieces.size(); i++) {
-            BlockPiece p = pieces.get(i);
-            int bestClears = 0;
-            for (int row = 0; row < BOARD_SIZE; row++) {
-                for (int col = 0; col < BOARD_SIZE; col++) {
-                    if (canPlace(p, row, col)) {
-                        boolean[][] tempBoard = copyBoard();
-                        for (BlockPiece.Cell cell : p.getCells()) {
-                            tempBoard[row + cell.row][col + cell.col] = true;
-                        }
-                        int lines = countCompletableLines(tempBoard);
-                        if (lines > bestClears) bestClears = lines;
-                    }
-                }
-            }
-            if (bestClears > 0) {
-                // If piece can clear lines, boost weight based on how many
-                // A clear-capable piece is prioritized if its clear count outweighs its own size
-                double clearBonus = (double) bestClears * 20.0;
-                weights[i] += clearBonus;
-                totalWeight += clearBonus;
-            }
-        }
-
-        double r = random.nextDouble() * totalWeight;
-        double countWeight = 0.0;
-        for (int i = 0; i < pieces.size(); i++) {
-            countWeight += weights[i];
-            if (countWeight >= r) {
-                return pieces.get(i);
-            }
-        }
-        return pieces.get(0); // Fallback in case of rounding errors
     }
 }

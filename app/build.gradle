@@ -11,8 +11,8 @@ android {
         applicationId 'com.example.killalltheblocks'
         minSdk 23
         targetSdk 35
-        versionCode 15
-        versionName '1.10'
+        versionCode 18
+        versionName '1.13'
     }
 
     buildTypes {

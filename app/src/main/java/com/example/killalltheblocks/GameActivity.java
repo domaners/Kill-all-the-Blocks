@@ -12,6 +12,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.Typeface;
@@ -688,7 +689,7 @@ public class GameActivity extends Activity {
         stopMusic();
         startGameplayMusic();
         engine.restoreState(savedGame.encodedBoard, savedGame.encodedBoardColors,
-                savedGame.pieceNames, savedGame.score, savedGame.selectedSlot, savedGame.comboStreak, savedGame.totalLinesClearedThisTray, savedGame.boardClearCount);
+                savedGame.pieceNames, savedGame.score, savedGame.comboStreak);
         gameStartedAt = savedGame.startedAtMillis;
         activeElapsedMillis = savedGame.elapsedMillis;
         gameEnded = savedGame.gameEnded;
@@ -777,12 +778,10 @@ public class GameActivity extends Activity {
         int clearedLines = engine.getLastClearedLines();
         playTone(ToneGenerator.TONE_PROP_BEEP);
         if (clearedLines > 0) {
-            boolean boardCleared = engine.isBoardEmpty();
-            int multiplier = engine.getLastScoreMultiplier();
             int combo = engine.getComboStreak();
             
-            boardView.triggerClearAnimations(multiplier, boardCleared, combo);
-            performClearHaptics(multiplier);
+            boardView.triggerClearAnimations(1, false, combo);
+            performClearHaptics(1);
             playTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD);
             shakeBoard();
         }
@@ -792,6 +791,7 @@ public class GameActivity extends Activity {
             finishGame();
         } else {
             refreshAll(true);
+            refreshPieceViews();
         }
     }
 
@@ -909,7 +909,7 @@ public class GameActivity extends Activity {
         return String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds);
     }
 
-    private int dp(int value) {
+    private int dp(float value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
@@ -1362,40 +1362,161 @@ public class GameActivity extends Activity {
 
     private final class PatternLayout extends LinearLayout {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private float glowPos = -0.5f;
+        private final List<GhostPiece> ghosts = new ArrayList<>();
+        private ValueAnimator glowAnimator;
+        private final Matrix shaderMatrix = new Matrix();
+        private LinearGradient glowShader;
+        private final RectF ghostRect = new RectF();
+
+        private int lastWidth = -1;
+        private int lastHeight = -1;
+
+        private class GhostPiece {
+            float x, y, scale;
+            BlockPiece piece;
+            int rotation;
+        }
 
         PatternLayout(Activity context) {
             super(context);
             setWillNotDraw(false);
+            initGhosts();
+            startAnimation();
+        }
+
+        private void initGhosts() {
+            Random r = new Random(42);
+            List<BlockPiece> all = BlockPiece.standardPieces();
+            float cellSize = dp(24); // Size used for overlap checking
+            for (int i = 0; i < 20; i++) { // Increased count slightly
+                GhostPiece g = new GhostPiece();
+                boolean overlaps;
+                int attempts = 0;
+                do {
+                    overlaps = false;
+                    g.x = r.nextFloat();
+                    g.y = r.nextFloat();
+                    g.scale = 1.0f + r.nextFloat() * 0.8f; // Larger scale
+                    g.piece = all.get(r.nextInt(all.size()));
+                    g.rotation = r.nextInt(4) * 90;
+                    
+                    // Basic overlap check
+                    float radius = (g.piece.getWidth() + g.piece.getHeight()) * cellSize * g.scale / 2f;
+                    for (GhostPiece other : ghosts) {
+                        float dx = (g.x - other.x) * 1000; // Use a fixed reference for screen units
+                        float dy = (g.y - other.y) * 1500;
+                        float dist = (float) Math.sqrt(dx*dx + dy*dy);
+                        float otherRadius = (other.piece.getWidth() + other.piece.getHeight()) * cellSize * other.scale / 2f;
+                        if (dist < (radius + otherRadius) * 0.8f) {
+                            overlaps = true;
+                            break;
+                        }
+                    }
+                    attempts++;
+                } while (overlaps && attempts < 20);
+                
+                ghosts.add(g);
+            }
+        }
+
+        private void startAnimation() {
+            glowAnimator = ValueAnimator.ofFloat(-0.8f, 1.8f);
+            glowAnimator.setDuration(8000); // Slightly faster for more visibility
+            glowAnimator.setRepeatCount(ValueAnimator.INFINITE);
+            glowAnimator.setRepeatMode(ValueAnimator.RESTART);
+            glowAnimator.setInterpolator(new android.view.animation.LinearInterpolator());
+            glowAnimator.addUpdateListener(animation -> {
+                glowPos = (float) animation.getAnimatedValue();
+                invalidate();
+            });
+            glowAnimator.start();
         }
 
         @Override
         protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+        }
+
+        @Override
+        protected void dispatchDraw(Canvas canvas) {
+            float w = getWidth();
+            float h = getHeight();
+            if (w <= 0 || h <= 0) {
+                super.dispatchDraw(canvas);
+                return;
+            }
+
+            // Neon Red and Purple Background
+            paint.setStyle(Paint.Style.FILL);
             paint.setShader(new LinearGradient(
-                    0, 0, getWidth(), getHeight(),
-                    new int[]{0xff26105f, 0xff0f766e, 0xffe11d48, 0xfff59e0b},
-                    null,
-                    Shader.TileMode.CLAMP));
-            canvas.drawRect(0, 0, getWidth(), getHeight(), paint);
+                    0, 0, w, h,
+                    new int[]{0xff9400d3, 0xffff003f, 0xff4b0082, 0xffff00ff, 0xff8b0000},
+                    null, Shader.TileMode.CLAMP));
+            canvas.drawRect(0, 0, w, h, paint);
             paint.setShader(null);
 
+            // Re-initialize shader if dimensions changed (Pure Neon Green flash)
+            if (w != lastWidth || h != lastHeight) {
+                glowShader = new LinearGradient(
+                        0, 0, w * 0.6f, 0,
+                        new int[]{0x0039ff14, 0x8839ff14, 0x8839ff14, 0x0039ff14},
+                        null, Shader.TileMode.CLAMP);
+                lastWidth = (int) w;
+                lastHeight = (int) h;
+            }
+
+            // Draw larger ghost shapes
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(dp(3)); // Thicker stroke
+            paint.setColor(0x33ffffff); // Brighter alpha
+            for (GhostPiece g : ghosts) {
+                canvas.save();
+                canvas.translate(g.x * w, g.y * h);
+                canvas.rotate(g.rotation);
+                canvas.scale(g.scale, g.scale);
+                
+                float cellSize = dp(24); // Larger cells
+                for (BlockPiece.Cell cell : g.piece.getCells()) {
+                    float left = cell.col * cellSize;
+                    float top = cell.row * cellSize;
+                    ghostRect.set(left, top, left + cellSize - dp(3), top + cellSize - dp(3));
+                    canvas.drawRoundRect(ghostRect, dp(6), dp(6), paint);
+                }
+                canvas.restore();
+            }
+
+            // Subtle grey grid lines
+            paint.setColor(0x11ffffff); 
+            float spacing = dp(50);
+            for (float x = 0; x < w; x += spacing) canvas.drawLine(x, 0, x, h, paint);
+            for (float y = 0; y < h; y += spacing) canvas.drawLine(0, y, w, y, paint);
+
+            // Draw stars (Subtle white style)
             paint.setStyle(Paint.Style.FILL);
             for (int i = 0; i < STAR_X.length; i++) {
-                float cx = STAR_X[i] * getWidth();
-                float cy = STAR_Y[i] * getHeight();
-                paint.setColor(i % 4 == 0 ? 0xfffff7ad : 0xeeffffff);
-                float size = dp(i % 3 == 0 ? 3 : 2);
-                canvas.drawLine(cx - size, cy, cx + size, cy, paint);
-                canvas.drawLine(cx, cy - size, cx, cy + size, paint);
+                float cx = STAR_X[i] * w;
+                float cy = STAR_Y[i] * h;
+                paint.setColor(0x88ffffff); 
+                canvas.drawCircle(cx, cy, dp(1.5f), paint);
             }
-            paint.setColor(0x33ffffff);
-            for (int i = 0; i < 7; i++) {
-                float startX = getWidth() * (0.08f + i * 0.13f);
-                float startY = getHeight() * (0.25f + (i % 3) * 0.12f);
-                canvas.drawRoundRect(
-                        new RectF(startX, startY, startX + dp(70 + i * 8), startY + dp(2)),
-                        dp(2), dp(2), paint);
+
+            // Draw transient NEON GREEN/YELLOW glow sweep
+            if (glowShader != null) {
+                shaderMatrix.setTranslate(glowPos * (w + w * 0.6f) - w * 0.3f, 0);
+                glowShader.setLocalMatrix(shaderMatrix);
+                paint.setShader(glowShader);
+                canvas.drawRect(0, 0, w, h, paint);
+                paint.setShader(null);
             }
-            super.onDraw(canvas);
+
+            super.dispatchDraw(canvas);
+        }
+
+        @Override
+        protected void onDetachedFromWindow() {
+            super.onDetachedFromWindow();
+            if (glowAnimator != null) glowAnimator.cancel();
         }
     }
 
@@ -1727,7 +1848,6 @@ public class GameActivity extends Activity {
         void triggerClearAnimations(int multiplier, boolean boardCleared, int combo) {
             flashingRows = engine.getLastClearedRowsCopy();
             flashingCols = engine.getLastClearedColsCopy();
-            int currentClearedLines = engine.getLastClearedLines();
             if (clearFlashAnimator != null) {
                 clearFlashAnimator.cancel();
             }
@@ -1739,22 +1859,12 @@ public class GameActivity extends Activity {
             });
             clearFlashAnimator.start();
 
-            if (boardCleared || multiplier > 1) {
-                String praise;
-                if (boardCleared) {
-                    praise = "BOARD CLEAR!";
-                } else {
-                    praise = PRAISE_TEXT.length == 0
-                            ? "Great!"
-                            : PRAISE_TEXT[praiseRandom.nextInt(PRAISE_TEXT.length)];
-                    
-                    if (combo > currentClearedLines) {
-                        praise = "MEGA COMBO!";
-                    }
-
-                    praise = praise + " x" + multiplier;
+            if (combo > 1) {
+                String praise = PRAISE_TEXT[praiseRandom.nextInt(PRAISE_TEXT.length)];
+                if (combo >= 4) {
+                    praise = "MEGA COMBO!";
                 }
-                praiseText = praise;
+                praiseText = praise + " x" + combo;
                 praiseProgress = 0f;
                 if (praiseAnimator != null) {
                     praiseAnimator.cancel();
