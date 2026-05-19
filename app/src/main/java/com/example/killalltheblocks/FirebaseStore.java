@@ -148,7 +148,7 @@ public class FirebaseStore {
         });
     }
 
-    public void saveSettings(int fxVolume, int musicVolume, boolean haptics, String playerName) {
+    public void saveSettings(int fxVolume, int musicVolume, boolean haptics, String playerName, Map<String, Object> devConfig) {
         FirebaseUser user = auth.getCurrentUser();
         if (user == null) return;
 
@@ -157,8 +157,39 @@ public class FirebaseStore {
         settings.put("musicVolume", musicVolume);
         settings.put("haptics", haptics);
         settings.put("playerName", playerName);
+        if (devConfig != null) {
+            settings.put("devConfig", devConfig);
+        }
 
         database.child(NODES_USERS).child(user.getUid()).child(NODES_SETTINGS).setValue(settings);
+    }
+
+    public void fetchSettings(final OnSettingsFetchedListener listener) {
+        FirebaseUser user = auth.getCurrentUser();
+        if (user == null) {
+            listener.onFetched(null);
+            return;
+        }
+
+        database.child(NODES_USERS).child(user.getUid()).child(NODES_SETTINGS).addListenerForSingleValueEvent(new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot snapshot) {
+                if (snapshot.exists()) {
+                    listener.onFetched((Map<String, Object>) snapshot.getValue());
+                } else {
+                    listener.onFetched(null);
+                }
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError error) {
+                listener.onFetched(null);
+            }
+        });
+    }
+
+    public interface OnSettingsFetchedListener {
+        void onFetched(Map<String, Object> settings);
     }
 
     public void fetchGlobalScores(final OnScoresFetchedListener listener) {
@@ -249,11 +280,18 @@ public class FirebaseStore {
         }
 
         // 2. Push local settings to Firebase
+        Map<String, Object> devConfigMap = null;
+        try {
+            org.json.JSONObject json = new org.json.JSONObject(localSettingsStore.getDevConfig());
+            devConfigMap = localSettingsStore.jsonToMap(json);
+        } catch (Exception ignored) {}
+        
         saveSettings(
                 localSettingsStore.getFxVolumePercent(),
                 localSettingsStore.getMusicVolumePercent(),
                 localSettingsStore.isHapticsEnabled(),
-                localSettingsStore.getPlayerName()
+                localSettingsStore.getPlayerName(),
+                devConfigMap
         );
 
         // 3. (Optional) Could also fetch settings from Firebase if they exist for this user

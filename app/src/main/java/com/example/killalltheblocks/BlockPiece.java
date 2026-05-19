@@ -16,11 +16,12 @@ public class BlockPiece {
         }
     }
 
-    private final String name;
+    private String name;
     private final Cell[] cells;
-    private final int color;
+    private int color;
     public enum Tier { EASY, MEDIUM, HARD }
-    private final Tier tier;
+    private Tier tier;
+    private int baseScore = -1; // -1 means use default logic
 
     public BlockPiece(String name, int[][] coords, int color, Tier tier) {
         this.name = name;
@@ -30,6 +31,18 @@ public class BlockPiece {
         }
         this.color = color;
         this.tier = tier;
+    }
+
+    public void setTier(Tier tier) {
+        this.tier = tier;
+    }
+
+    public void setBaseScore(int baseScore) {
+        this.baseScore = baseScore;
+    }
+
+    public int getBaseScore() {
+        return baseScore;
     }
 
     @Override

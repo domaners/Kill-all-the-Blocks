@@ -71,8 +71,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Executors;
 
@@ -341,6 +343,121 @@ public class GameActivity extends Activity {
         setContentView(root);
     }
 
+    private void showDevConfigScreen() {
+        stopMusic();
+        PatternLayout root = baseRoot();
+        root.setOrientation(LinearLayout.VERTICAL);
+
+        ScrollView scrollView = new ScrollView(this);
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(20), dp(20), dp(20), dp(20));
+
+        content.addView(screenHeading("Dev Config"));
+
+        // Colors Section
+        content.addView(settingLabel("Background Colors (Hex)"));
+        String currentConfig = settingsStore.getDevConfig();
+        org.json.JSONObject configJson;
+        try {
+            configJson = new org.json.JSONObject(currentConfig);
+        } catch (Exception e) {
+            configJson = new org.json.JSONObject();
+        }
+
+        EditText bgColorsInput = new EditText(this);
+        bgColorsInput.setTextColor(Color.WHITE);
+        try {
+            if (configJson.has("bgColors")) {
+                bgColorsInput.setText(configJson.getJSONArray("bgColors").toString());
+            } else {
+                bgColorsInput.setText("[\"#0f172a\", \"#4c1d95\", \"#831843\", \"#7c2d12\"]");
+            }
+        } catch (Exception e) {
+            bgColorsInput.setText("[]");
+        }
+        content.addView(bgColorsInput);
+
+        content.addView(settingLabel("Wave Color (Hex)"));
+        EditText waveColorInput = new EditText(this);
+        waveColorInput.setTextColor(Color.WHITE);
+        waveColorInput.setText(configJson.optString("waveColor", "#aa39ff14"));
+        content.addView(waveColorInput);
+
+        // Pieces Section
+        content.addView(screenHeading("Block Difficulty & Score"));
+        List<BlockPiece> allPieces = BlockPiece.standardPieces();
+        Map<String, Spinner> spinners = new HashMap<>();
+        Map<String, EditText> scoreInputs = new HashMap<>();
+
+        for (BlockPiece piece : allPieces) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+
+            TextView nameLabel = new TextView(this);
+            nameLabel.setText(piece.getName());
+            nameLabel.setTextColor(Color.LTGRAY);
+            row.addView(nameLabel, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+            Spinner tierSpinner = new Spinner(this);
+            ArrayAdapter<BlockPiece.Tier> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, BlockPiece.Tier.values());
+            tierSpinner.setAdapter(adapter);
+            
+            // Set selection based on current config or defaults
+            BlockPiece.Tier currentTier = piece.getTier();
+            tierSpinner.setSelection(currentTier.ordinal());
+            spinners.put(piece.getName(), tierSpinner);
+            row.addView(tierSpinner, new LinearLayout.LayoutParams(dp(100), ViewGroup.LayoutParams.WRAP_CONTENT));
+
+            EditText scoreInput = new EditText(this);
+            scoreInput.setTextColor(Color.WHITE);
+            scoreInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+            int currentBaseScore = piece.getBaseScore();
+            scoreInput.setText(String.valueOf(currentBaseScore > 0 ? currentBaseScore : piece.getCellCount()));
+            scoreInputs.put(piece.getName(), scoreInput);
+            row.addView(scoreInput, new LinearLayout.LayoutParams(dp(60), ViewGroup.LayoutParams.WRAP_CONTENT));
+
+            content.addView(row);
+        }
+
+        Button saveBtn = menuButton("Save & Sync");
+        saveBtn.setOnClickListener(v -> {
+            try {
+                org.json.JSONObject newConfig = new org.json.JSONObject();
+                newConfig.put("bgColors", new org.json.JSONArray(bgColorsInput.getText().toString()));
+                newConfig.put("waveColor", waveColorInput.getText().toString());
+
+                org.json.JSONObject piecesJson = new org.json.JSONObject();
+                for (BlockPiece piece : allPieces) {
+                    org.json.JSONObject p = new org.json.JSONObject();
+                    p.put("tier", spinners.get(piece.getName()).getSelectedItem().toString());
+                    p.put("baseScore", Integer.parseInt(scoreInputs.get(piece.getName()).getText().toString()));
+                    piecesJson.put(piece.getName(), p);
+                }
+                newConfig.put("pieces", piecesJson);
+
+                String jsonStr = newConfig.toString();
+                settingsStore.setDevConfig(jsonStr);
+                settingsStore.syncToFirebase();
+                settingsStore.applyDevConfigToPieces();
+                
+                Toast.makeText(this, "Config Saved & Syncing...", Toast.LENGTH_SHORT).show();
+            } catch (Exception e) {
+                Toast.makeText(this, "Error saving: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        });
+        content.addView(saveBtn);
+
+        Button backBtn = menuButton("Back");
+        backBtn.setOnClickListener(v -> showSettingsScreen(settingsOpenedFromGame));
+        content.addView(backBtn);
+
+        scrollView.addView(content);
+        root.addView(scrollView);
+        setContentView(root);
+    }
+
     private void showSettingsScreen(boolean fromGame) {
         settingsOpenedFromGame = fromGame;
         timerHandler.removeCallbacks(timerRunnable);
@@ -474,6 +591,13 @@ public class GameActivity extends Activity {
                 .setNegativeButton("Cancel", null)
                 .show());
         root.addView(clearScores, buttonParams());
+
+        Button devConfigBtn = menuButton("Dev Config");
+        devConfigBtn.setOnClickListener(v -> {
+            settingsStore.setPlayerName(playerName.getText().toString());
+            showDevConfigScreen();
+        });
+        root.addView(devConfigBtn, buttonParams());
 
         Button back = menuButton("Back");
         back.setOnClickListener(v -> {
@@ -666,6 +790,7 @@ public class GameActivity extends Activity {
     }
 
     private void startNewGame() {
+        settingsStore.applyDevConfigToPieces();
         engine.reset();
         stopMusic();
         startGameplayMusic();
@@ -681,6 +806,7 @@ public class GameActivity extends Activity {
     }
 
     private void resumeSavedGame() {
+        settingsStore.applyDevConfigToPieces();
         GameStateStore.SavedGame savedGame = gameStateStore.load();
         if (savedGame == null) {
             startNewGame();
@@ -1388,25 +1514,23 @@ public class GameActivity extends Activity {
         private void initGhosts() {
             Random r = new Random(42);
             List<BlockPiece> all = BlockPiece.standardPieces();
-            float spacing = dp(50);
             for (int i = 0; i < 20; i++) {
                 GhostPiece g = new GhostPiece();
                 boolean overlaps;
                 int attempts = 0;
                 do {
                     overlaps = false;
-                    // Align to grid spacing
-                    g.x = (float) Math.floor(r.nextFloat() * 15);
-                    g.y = (float) Math.floor(r.nextFloat() * 25);
-                    g.scale = 1.0f; // Scale 1.0 to fit grid perfectly
+                    // Align to grid spacing (0 to 15 horizontal, 0 to 25 vertical approximately)
+                    g.x = (float) Math.floor(r.nextFloat() * 10); // Using 10 to keep within visible bounds
+                    g.y = (float) Math.floor(r.nextFloat() * 18);
+                    g.scale = 1.0f; // Must be 1.0 to fit grid exactly
                     g.piece = all.get(r.nextInt(all.size()));
                     g.rotation = r.nextInt(4) * 90;
                     
                     for (GhostPiece other : ghosts) {
                         float dx = Math.abs(g.x - other.x);
                         float dy = Math.abs(g.y - other.y);
-                        // Simple grid-based overlap check
-                        if (dx < 4 && dy < 4) {
+                        if (dx < 5 && dy < 5) { // Check proximity
                             overlaps = true;
                             break;
                         }
@@ -1419,8 +1543,8 @@ public class GameActivity extends Activity {
         }
 
         private void startAnimation() {
-            glowAnimator = ValueAnimator.ofFloat(-0.8f, 1.8f);
-            glowAnimator.setDuration(8000); // Slightly faster for more visibility
+            glowAnimator = ValueAnimator.ofFloat(-1.2f, 2.2f); // Wider range for smooth entry/exit
+            glowAnimator.setDuration(8000);
             glowAnimator.setRepeatCount(ValueAnimator.INFINITE);
             glowAnimator.setRepeatMode(ValueAnimator.RESTART);
             glowAnimator.setInterpolator(new android.view.animation.LinearInterpolator());
@@ -1445,11 +1569,13 @@ public class GameActivity extends Activity {
                 return;
             }
 
-            // Darker Deep Blue/Purple/Pink/Orange Background
+            // Customizable Background Gradient
+            int[] defaultBg = new int[]{0xff0f172a, 0xff4c1d95, 0xff831843, 0xff7c2d12};
+            int[] bgColors = settingsStore.getBackgroundColors(defaultBg);
             paint.setStyle(Paint.Style.FILL);
             paint.setShader(new LinearGradient(
                     0, 0, w, h,
-                    new int[]{0xff0f172a, 0xff4c1d95, 0xff831843, 0xff7c2d12},
+                    bgColors,
                     null, Shader.TileMode.CLAMP));
             canvas.drawRect(0, 0, w, h, paint);
             paint.setShader(null);
@@ -1462,15 +1588,17 @@ public class GameActivity extends Activity {
             paint.setColor(0x33ffffff);
             for (GhostPiece g : ghosts) {
                 canvas.save();
+                // Offset to align perfectly with grid lines
                 canvas.translate(g.x * spacing, g.y * spacing);
                 canvas.rotate(g.rotation);
                 
-                float cellSize = spacing / 4f; // Fit inside the grid spacing
+                float cellSize = spacing / 4f; // Sized so 4 cells fit in one major grid square
                 for (BlockPiece.Cell cell : g.piece.getCells()) {
                     float left = cell.col * cellSize;
                     float top = cell.row * cellSize;
-                    ghostRect.set(left + dp(2), top + dp(2), left + cellSize - dp(2), top + cellSize - dp(2));
-                    canvas.drawRoundRect(ghostRect, dp(6), dp(6), paint);
+                    // Draw exactly to the edges (no padding)
+                    ghostRect.set(left, top, left + cellSize, top + cellSize);
+                    canvas.drawRoundRect(ghostRect, dp(2), dp(2), paint);
                 }
                 canvas.restore();
             }
@@ -1484,23 +1612,25 @@ public class GameActivity extends Activity {
                 canvas.drawCircle(cx, cy, dp(1.5f), paint);
             }
 
-            // Highlight wave only on grid lines
+            // Customizable Wave Color
+            int waveColor = settingsStore.getWaveColor(0xaa39ff14);
+            int transparentWave = waveColor & 0x00ffffff; // Force alpha to 0 for ends
+
             if (w != lastWidth || h != lastHeight) {
                 glowShader = new LinearGradient(
-                        0, 0, spacing * 2, 0,
-                        new int[]{0x0039ff14, 0xaa39ff14, 0xaa39ff14, 0x0039ff14},
+                        0, 0, spacing * 4, 0,
+                        new int[]{transparentWave, waveColor, waveColor, transparentWave},
                         null, Shader.TileMode.CLAMP);
                 lastWidth = (int) w;
                 lastHeight = (int) h;
             }
 
             if (glowShader != null) {
-                shaderMatrix.setTranslate(glowPos * (w + spacing * 4) - spacing * 2, 0);
+                shaderMatrix.setTranslate(glowPos * (w + spacing * 8) - spacing * 4, 0);
                 glowShader.setLocalMatrix(shaderMatrix);
                 paint.setShader(glowShader);
-                paint.setStrokeWidth(dp(2));
+                paint.setStrokeWidth(dp(3));
                 
-                // Draw ONLY the lines with the shader
                 for (float x = 0; x <= w; x += spacing) {
                     canvas.drawLine(x, 0, x, h, paint);
                 }

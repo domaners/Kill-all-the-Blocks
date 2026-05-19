@@ -107,11 +107,19 @@ public class GameEngine {
         // Scoring
         if (lastClearedLines > 0) {
             comboStreak++;
-            int basePoints = getBasePoints(lastClearedLines);
+            int basePoints = piece.getBaseScore();
+            if (basePoints <= 0) {
+                basePoints = getBasePoints(lastClearedLines);
+            }
             score += basePoints * (comboStreak);
         } else {
             comboStreak = 0;
-            score += piece.getCellCount();
+            int basePoints = piece.getBaseScore();
+            if (basePoints > 0) {
+                score += basePoints;
+            } else {
+                score += piece.getCellCount();
+            }
         }
 
         tray[slot] = null;
@@ -122,13 +130,18 @@ public class GameEngine {
     }
 
     private int getBasePoints(int lines) {
+        // Check if the current piece has a custom base score set
+        // Note: This logic might need refinement if multiple pieces were involved in a tray refill
+        // but typically it applies to the piece just placed.
+        // However, placePiece already has access to the piece.
+        // Let's modify placePiece to use piece.getBaseScore() if available.
         switch (lines) {
             case 1: return 100;
             case 2: return 200;
             case 3: return 600;
             case 4: return 1200;
             case 5: return 2000;
-            default: return lines * 50; // Fallback for massive clears
+            default: return lines * 50;
         }
     }
 
