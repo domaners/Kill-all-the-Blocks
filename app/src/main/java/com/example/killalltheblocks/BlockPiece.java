@@ -99,7 +99,7 @@ public class BlockPiece {
     public static List<BlockPiece> standardPieces() {
         List<BlockPiece> pieces = new ArrayList<>();
         // EASY
-        pieces.add(new BlockPiece("Single", new int[][]{{0, 0}}, 0xffff1744, Tier.EASY));
+        pieces.add(new BlockPiece("Single", new int[][]{{0, 0}}, 0xffff1744, Tier.MEDIUM));
         pieces.add(new BlockPiece("Two Vertical", new int[][]{{0, 0}, {1, 0}}, 0xffd500f9, Tier.EASY));
         pieces.add(new BlockPiece("Two Horizontal", new int[][]{{0, 0}, {0, 1}}, 0xff304ffe, Tier.EASY));
         pieces.add(new BlockPiece("Three Vertical", new int[][]{{0, 0}, {1, 0}, {2, 0}}, 0xff00b0ff, Tier.EASY));
@@ -124,13 +124,8 @@ public class BlockPiece {
         pieces.add(new BlockPiece("T Up", new int[][]{{1, 0}, {1, 1}, {1, 2}, {0, 1}}, 0xff2979ff, Tier.MEDIUM));
         pieces.add(new BlockPiece("T Right", new int[][]{{0, 0}, {1, 0}, {2, 0}, {1, 1}}, 0xff2979ff, Tier.MEDIUM));
         pieces.add(new BlockPiece("T Left", new int[][]{{0, 1}, {1, 1}, {2, 1}, {1, 0}}, 0xff2979ff, Tier.MEDIUM));
-        pieces.add(new BlockPiece("Z", new int[][]{{0, 0}, {0, 1}, {1, 1}, {1, 2}}, 0xff00b8d4, Tier.MEDIUM));
-        pieces.add(new BlockPiece("S", new int[][]{{0, 1}, {0, 2}, {1, 0}, {1, 1}}, 0xff76ff03, Tier.MEDIUM));
-
-        pieces.add(new BlockPiece("L 2x3 Up", new int[][]{{0, 0}, {1, 0}, {2, 0}, {2, 1}}, 0xffff4081, Tier.MEDIUM));
-        pieces.add(new BlockPiece("L 2x3 Down", new int[][]{{0, 0}, {0, 1}, {1, 1}, {2, 1}}, 0xffff4081, Tier.MEDIUM));
-        pieces.add(new BlockPiece("L 2x3 Right", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 0}}, 0xffff4081, Tier.MEDIUM));
-        pieces.add(new BlockPiece("L 2x3 Left", new int[][]{{0, 2}, {1, 0}, {1, 1}, {1, 2}}, 0xffff4081, Tier.MEDIUM));
+        pieces.add(new BlockPiece("Z", new int[][]{{0, 0}, {0, 1}, {1, 1}, {1, 2}}, 0xff00b8d4, Tier.HARD));
+        pieces.add(new BlockPiece("S", new int[][]{{0, 1}, {0, 2}, {1, 0}, {1, 1}}, 0xff76ff03, Tier.HARD));
 
         // HARD
         pieces.add(new BlockPiece("Five Horizontal", new int[][]{{0, 0}, {0, 1}, {0, 2}, {0, 3}, {0, 4}}, 0xffffff00, Tier.HARD));
@@ -138,12 +133,12 @@ public class BlockPiece {
                 {0, 0}, {0, 1}, {0, 2},
                 {1, 0}, {1, 1}, {1, 2},
                 {2, 0}, {2, 1}, {2, 2}}, 0xfff50057, Tier.HARD));
-        pieces.add(new BlockPiece("L 3x3", new int[][]{{0, 0}, {1, 0}, {2, 0}, {2, 1}, {2, 2}}, 0xffff3d00, Tier.HARD));
+        pieces.add(new BlockPiece("L 3x3", new int[][]{{0, 0}, {1, 0}, {2, 0}, {2, 1}, {2, 2}}, 0xffff3d00, Tier.MEDIUM));
         pieces.add(new BlockPiece("L 3x3 Flip Horizontal", new int[][]{{0, 2}, {1, 2}, {2, 0}, {2, 1}, {2, 2}}, 0xffaa00ff, Tier.HARD));
         pieces.add(new BlockPiece("L 3x3 Flip Vertical", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 0}, {2, 0}}, 0xff00e5ff, Tier.HARD));
         pieces.add(new BlockPiece("L 3x3 Flip Both", new int[][]{{0, 0}, {0, 1}, {0, 2}, {1, 2}, {2, 2}}, 0xff00e676, Tier.HARD));
-        pieces.add(new BlockPiece("Two Diagonal Down", new int[][]{{0, 0}, {1, 1}}, 0xff00e5ff, Tier.HARD));
-        pieces.add(new BlockPiece("Two Diagonal Up", new int[][]{{0, 1}, {1, 0}}, 0xff1de9b6, Tier.HARD));
+        pieces.add(new BlockPiece("Two Diagonal Down", new int[][]{{0, 0}, {1, 1}}, 0xff00e5ff, Tier.MEDIUM));
+        pieces.add(new BlockPiece("Two Diagonal Up", new int[][]{{0, 1}, {1, 0}}, 0xff1de9b6, Tier.MEDIUM));
         pieces.add(new BlockPiece("Three Diagonal Down", new int[][]{{0, 0}, {1, 1}, {2, 2}}, 0xffc6ff00, Tier.HARD));
         pieces.add(new BlockPiece("Three Diagonal Up", new int[][]{{0, 2}, {1, 1}, {2, 0}}, 0xffffab00, Tier.HARD));
 

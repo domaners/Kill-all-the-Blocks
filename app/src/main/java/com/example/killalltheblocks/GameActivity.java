@@ -1388,33 +1388,31 @@ public class GameActivity extends Activity {
         private void initGhosts() {
             Random r = new Random(42);
             List<BlockPiece> all = BlockPiece.standardPieces();
-            float cellSize = dp(24); // Size used for overlap checking
-            for (int i = 0; i < 20; i++) { // Increased count slightly
+            float spacing = dp(50);
+            for (int i = 0; i < 20; i++) {
                 GhostPiece g = new GhostPiece();
                 boolean overlaps;
                 int attempts = 0;
                 do {
                     overlaps = false;
-                    g.x = r.nextFloat();
-                    g.y = r.nextFloat();
-                    g.scale = 1.0f + r.nextFloat() * 0.8f; // Larger scale
+                    // Align to grid spacing
+                    g.x = (float) Math.floor(r.nextFloat() * 15);
+                    g.y = (float) Math.floor(r.nextFloat() * 25);
+                    g.scale = 1.0f; // Scale 1.0 to fit grid perfectly
                     g.piece = all.get(r.nextInt(all.size()));
                     g.rotation = r.nextInt(4) * 90;
                     
-                    // Basic overlap check
-                    float radius = (g.piece.getWidth() + g.piece.getHeight()) * cellSize * g.scale / 2f;
                     for (GhostPiece other : ghosts) {
-                        float dx = (g.x - other.x) * 1000; // Use a fixed reference for screen units
-                        float dy = (g.y - other.y) * 1500;
-                        float dist = (float) Math.sqrt(dx*dx + dy*dy);
-                        float otherRadius = (other.piece.getWidth() + other.piece.getHeight()) * cellSize * other.scale / 2f;
-                        if (dist < (radius + otherRadius) * 0.8f) {
+                        float dx = Math.abs(g.x - other.x);
+                        float dy = Math.abs(g.y - other.y);
+                        // Simple grid-based overlap check
+                        if (dx < 4 && dy < 4) {
                             overlaps = true;
                             break;
                         }
                     }
                     attempts++;
-                } while (overlaps && attempts < 20);
+                } while (overlaps && attempts < 30);
                 
                 ghosts.add(g);
             }
@@ -1447,52 +1445,37 @@ public class GameActivity extends Activity {
                 return;
             }
 
-            // Neon Red and Purple Background
+            // Darker Deep Blue/Purple/Pink/Orange Background
             paint.setStyle(Paint.Style.FILL);
             paint.setShader(new LinearGradient(
                     0, 0, w, h,
-                    new int[]{0xff9400d3, 0xffff003f, 0xff4b0082, 0xffff00ff, 0xff8b0000},
+                    new int[]{0xff0f172a, 0xff4c1d95, 0xff831843, 0xff7c2d12},
                     null, Shader.TileMode.CLAMP));
             canvas.drawRect(0, 0, w, h, paint);
             paint.setShader(null);
 
-            // Re-initialize shader if dimensions changed (Pure Neon Green flash)
-            if (w != lastWidth || h != lastHeight) {
-                glowShader = new LinearGradient(
-                        0, 0, w * 0.6f, 0,
-                        new int[]{0x0039ff14, 0x8839ff14, 0x8839ff14, 0x0039ff14},
-                        null, Shader.TileMode.CLAMP);
-                lastWidth = (int) w;
-                lastHeight = (int) h;
-            }
+            float spacing = dp(50);
 
-            // Draw larger ghost shapes
+            // Draw ghost shapes aligned to grid
             paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(dp(3)); // Thicker stroke
-            paint.setColor(0x33ffffff); // Brighter alpha
+            paint.setStrokeWidth(dp(3));
+            paint.setColor(0x33ffffff);
             for (GhostPiece g : ghosts) {
                 canvas.save();
-                canvas.translate(g.x * w, g.y * h);
+                canvas.translate(g.x * spacing, g.y * spacing);
                 canvas.rotate(g.rotation);
-                canvas.scale(g.scale, g.scale);
                 
-                float cellSize = dp(24); // Larger cells
+                float cellSize = spacing / 4f; // Fit inside the grid spacing
                 for (BlockPiece.Cell cell : g.piece.getCells()) {
                     float left = cell.col * cellSize;
                     float top = cell.row * cellSize;
-                    ghostRect.set(left, top, left + cellSize - dp(3), top + cellSize - dp(3));
+                    ghostRect.set(left + dp(2), top + dp(2), left + cellSize - dp(2), top + cellSize - dp(2));
                     canvas.drawRoundRect(ghostRect, dp(6), dp(6), paint);
                 }
                 canvas.restore();
             }
 
-            // Subtle grey grid lines
-            paint.setColor(0x11ffffff); 
-            float spacing = dp(50);
-            for (float x = 0; x < w; x += spacing) canvas.drawLine(x, 0, x, h, paint);
-            for (float y = 0; y < h; y += spacing) canvas.drawLine(0, y, w, y, paint);
-
-            // Draw stars (Subtle white style)
+            // Draw Stars
             paint.setStyle(Paint.Style.FILL);
             for (int i = 0; i < STAR_X.length; i++) {
                 float cx = STAR_X[i] * w;
@@ -1501,12 +1484,29 @@ public class GameActivity extends Activity {
                 canvas.drawCircle(cx, cy, dp(1.5f), paint);
             }
 
-            // Draw transient NEON GREEN/YELLOW glow sweep
+            // Highlight wave only on grid lines
+            if (w != lastWidth || h != lastHeight) {
+                glowShader = new LinearGradient(
+                        0, 0, spacing * 2, 0,
+                        new int[]{0x0039ff14, 0xaa39ff14, 0xaa39ff14, 0x0039ff14},
+                        null, Shader.TileMode.CLAMP);
+                lastWidth = (int) w;
+                lastHeight = (int) h;
+            }
+
             if (glowShader != null) {
-                shaderMatrix.setTranslate(glowPos * (w + w * 0.6f) - w * 0.3f, 0);
+                shaderMatrix.setTranslate(glowPos * (w + spacing * 4) - spacing * 2, 0);
                 glowShader.setLocalMatrix(shaderMatrix);
                 paint.setShader(glowShader);
-                canvas.drawRect(0, 0, w, h, paint);
+                paint.setStrokeWidth(dp(2));
+                
+                // Draw ONLY the lines with the shader
+                for (float x = 0; x <= w; x += spacing) {
+                    canvas.drawLine(x, 0, x, h, paint);
+                }
+                for (float y = 0; y <= h; y += spacing) {
+                    canvas.drawLine(0, y, w, y, paint);
+                }
                 paint.setShader(null);
             }
 
